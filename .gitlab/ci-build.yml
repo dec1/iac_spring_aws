@@ -1,0 +1,24 @@
+# .gitlab/ci-build.yml
+#
+# Compile and test -- no AWS credentials needed.
+# This file is always included by the main .gitlab-ci.yml.
+# For open-source showcasing, this can be the only included file.
+
+compile_and_unit_test:
+  stage: test_local
+  script:
+    - cd "$SPRING_DIR"
+
+    - echo "GRADLE_USER_HOME=$GRADLE_USER_HOME"
+    - free -m || true
+    - df -h || true
+    - nproc || true
+    - date
+    - timeout 25m ./gradlew clean test integrationTest --no-daemon --console=plain --stacktrace --info
+    - date
+  artifacts:
+    when: always
+    reports:
+      junit:
+        - "$SPRING_DIR/build/test-results/test/*.xml"
+        - "$SPRING_DIR/build/test-results/integrationTest/*.xml"

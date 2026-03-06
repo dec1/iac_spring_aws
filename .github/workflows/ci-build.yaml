@@ -1,0 +1,74 @@
+# .github/workflows/ci-build.yaml
+#
+# Compile and test -- no AWS credentials needed.
+# Called by ci.yaml
+# Can run on GitHub-hosted or self-hosted runners.
+
+name: Build & Test
+
+on:
+  workflow_call:
+    inputs:
+      spring_dir:
+        type: string
+        default: spring
+      runner_labels:
+        type: string
+        default: '["ubuntu-latest"]'
+
+jobs:
+  compile_and_unit_test:
+    runs-on: ${{ fromJSON(inputs.runner_labels) }}
+
+    # NOTE:
+    # - Tests load a Spring context that constructs AWS SDK clients.
+    # - AWS SDK requires a region during client construction.
+    # - On self-hosted/AWS runners, AWS_REGION / AWS_DEFAULT_REGION (or AWS config/IMDS) may already exist.
+    # - On GitHub-hosted runners, they usually do not.
+    #
+    # We *do not* set AWS_REGION here unconditionally, because we don't want to override a region that is
+    # already configured on an AWS/self-hosted runner.
+    #
+    # Instead, we conditionally set a default region (from GitHub UI variable vars.AWS_REGION) only
+    # when neither AWS_REGION nor AWS_DEFAULT_REGION is already set.
+    #
+    # This avoids surprising behavior on AWS runners while keeping GitHub-hosted runs working.
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Default AWS region for tests (only if not already set)
+        shell: bash
+        run: |
+          # If the runner already provides region (env, profile config, etc), keep it.
+          # If not, set it from the GitHub UI Actions variable: vars.AWS_REGION.
+          if [ -z "${AWS_REGION:-}" ] && [ -z "${AWS_DEFAULT_REGION:-}" ]; then
+            echo "AWS_REGION=${{ vars.AWS_REGION }}" >> "$GITHUB_ENV"
+            echo "AWS_DEFAULT_REGION=${{ vars.AWS_REGION }}" >> "$GITHUB_ENV"
+          fi
+
+          # Sanity print (helps diagnose missing vars.AWS_REGION)
+          echo "AWS_REGION=${AWS_REGION:-<unset>}"
+          echo "AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-<unset>}"
+
+      - name: Build + unit/integration tests (local)
+        run: |
+          cd "${{ inputs.spring_dir }}"
+          ./gradlew clean test integrationTest --no-daemon --console=plain --stacktrace --info
+
+      # Make Gradle test reports/results available as downloadable artifacts.
+      - name: Upload ${{ github.job }} test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          # Include job name to avoid collisions if this workflow later grows more jobs.
+          name: test-reports-${{ github.job }}
+          path: |
+            ${{ inputs.spring_dir }}/build/reports/tests/**
+            ${{ inputs.spring_dir }}/build/test-results/**

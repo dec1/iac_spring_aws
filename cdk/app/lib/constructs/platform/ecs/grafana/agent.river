@@ -1,0 +1,34 @@
+// Alloy Sidecar Configuration for ECS
+// Docs: https://grafana.com/docs/alloy/latest/
+
+// NOTE: Global Alloy settings (log level, http_listen_addr, etc.)
+// are now set via CLI arguments, not in this config file.
+// See: https://grafana.com/docs/alloy/latest/configuration/components/
+
+prometheus.remote_write "grafana_cloud" {
+  endpoint {
+    url = env("GRAFANA_REMOTE_WRITE_URL")
+
+    basic_auth {
+      username = env("GRAFANA_USERNAME") // Grafana Cloud metrics instance ID
+      password = env("GRAFANA_API_KEY")  // Grafana Cloud API Key (write permission)
+    }
+  }
+}
+
+// Scraper: pulls metrics from your app
+prometheus.scrape "app" {
+  // List of targets to scrape
+  targets = [{
+    __address__ = "localhost:8080",
+  }]
+
+  // Path to app metrics (Spring Boot Actuator Prometheus endpoint)
+  metrics_path = "/actuator/prometheus"
+
+  scrape_interval = "15s"
+  scrape_timeout  = "10s"
+
+  // **This tells Alloy where to send the scraped metrics**
+  forward_to = [prometheus.remote_write.grafana_cloud.receiver]
+}

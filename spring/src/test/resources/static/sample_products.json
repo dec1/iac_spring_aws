@@ -1,0 +1,24 @@
+{
+  "products": [
+    {
+      "id": "prod-001",
+      "name": "Widget Alpha",
+      "price": 9.99,
+      "category": "components",
+      "tags": ["sale", "new"]
+    },
+    {
+      "id": "prod-002",
+      "name": "Gadget Beta",
+      "price": 19.99,
+      "category": "accessories",
+      "tags": ["popular"]
+    },
+    {
+      "id": "prod-003",
+      "name": "Doohickey Gamma",
+      "price": 4.50,
+      "category": "components"
+    }
+  ]
+}

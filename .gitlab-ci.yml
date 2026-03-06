@@ -1,0 +1,60 @@
+# .gitlab-ci.yml
+#
+# Main CI entry point. Includes the build stage (always) and deploy stage (comment out for open-source).
+
+workflow:
+  auto_cancel:
+    # try to cancel any interruptible pipelines (on same branch)
+    on_new_commit: interruptible
+
+default:
+  # Make jobs interruptible by default (can set explicit `interruptible: false` in any job that needs it).
+  interruptible: true
+  image: amazoncorretto:21
+  tags:
+    - my-backend-runner-tag
+
+stages:
+  - secret-detection
+  - test_local
+  - deploy_dev
+  - test_remote_dev
+  - deploy_release
+
+variables:
+  SPRING_DIR: "spring"
+  CDK_APP_DIR: "cdk/app"
+  GRADLE_USER_HOME: "$CI_PROJECT_DIR/.gradle"
+  # AWS_PROFILE: ""          # do NOT set this to empty; it breaks AWS CLI/SDK profile resolution
+
+  # --- Single source of truth for AWS/CDK target ---
+  # - Account - derived from the active credentials (instance role / assumed role / access keys).
+  # - Region  - provide via AWS_REGION (preferred) or AWS_DEFAULT_REGION.
+
+cache:
+  key: "gradle-${CI_PROJECT_PATH_SLUG}-${CI_COMMIT_REF_SLUG}"
+  paths:
+    - .gradle/wrapper
+    - .gradle/caches
+
+include:
+  # Always: compile and test (no AWS credentials needed)
+  - local: '.gitlab/ci-build.yml'
+
+  # Deploy to AWS (ECS and/or EKS, driven by config.yaml).
+  # Comment out the line below for open-source showcasing (build + test only).
+  - local: '.gitlab/ci-deploy.yml'
+
+# -----------------------------------------------------------------------------------
+  # GitLab-managed security scanning (SAST, secret detection).
+  # Comment out if not needed. Template updates come from GitLab automatically.
+  - local: '.gitlab/ci-security.yml'
+
+# --- Remap security jobs to run in our test_local stage ---
+# These override the stage values set inside GitLab's templates.
+# Job names come from the templates themselves; check GitLab docs if they change.
+sast:
+  stage: test_local
+
+secret_detection:
+  stage: test_local

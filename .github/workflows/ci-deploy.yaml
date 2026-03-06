@@ -1,0 +1,261 @@
+# .github/workflows/ci-deploy.yaml
+#
+# Push image + deploy stacks. Requires AWS credentials (runner instance role).
+# Handles both ECS and EKS deployments, driven by config.yaml.
+# Called by ci.yaml.
+
+name: Deploy
+
+on:
+  workflow_call:
+    inputs:
+      spring_dir:
+        type: string
+        default: spring
+      cdk_app_dir:
+        type: string
+        default: cdk/app
+      runner_labels:
+        type: string
+        default: '["self-hosted", "linux", "x64", "my-backend-runner-label"]'
+
+jobs:
+  push_image:
+    runs-on: ${{ fromJSON(inputs.runner_labels) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Ensure region set
+        run: |
+          echo "AWS_REGION=${AWS_REGION}"
+          aws configure set region "${AWS_REGION}"
+
+      - name: Push image with Jib
+        run: |
+          cd "${{ inputs.spring_dir }}"
+          export JIB_USERNAME="AWS"
+          export JIB_PASSWORD="$(aws ecr get-login-password)"
+          ./gradlew jib --no-daemon --console=plain
+
+  # --- Resolve config-driven deploy targets ---
+  resolve_targets:
+    runs-on: ${{ fromJSON(inputs.runner_labels) }}
+    outputs:
+      has_ecs_dev: ${{ steps.resolve.outputs.has_ecs_dev }}
+      has_ecs_release: ${{ steps.resolve.outputs.has_ecs_release }}
+      has_k8s_dev: ${{ steps.resolve.outputs.has_k8s_dev }}
+      has_k8s_release: ${{ steps.resolve.outputs.has_k8s_release }}
+      service_name: ${{ steps.resolve.outputs.service_name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Resolve deploy targets from config.yaml
+        id: resolve
+        run: |
+          chmod +x "${{ inputs.cdk_app_dir }}/ci/resolve-deploy-targets.sh"
+          ${{ inputs.cdk_app_dir }}/ci/resolve-deploy-targets.sh >> "$GITHUB_OUTPUT"
+
+          # Also resolve service name
+          cd "${{ inputs.cdk_app_dir }}"
+          node - "../../config_common.yaml" <<'NODE'
+          const fs = require("fs");
+          const configPath = process.argv[2];
+
+          let YAML;
+          try { YAML = require("yaml"); } catch { YAML = null; }
+
+          let serviceName;
+          if (YAML) {
+            const parsed = YAML.parse(fs.readFileSync(configPath, "utf8"));
+            serviceName = parsed?.serviceName?.trim();
+          } else {
+            // Fallback: grep
+            const match = fs.readFileSync(configPath, "utf8").match(/^\s*serviceName\s*:\s*"?([^"#\n]+)/m);
+            serviceName = match?.[1]?.trim();
+          }
+
+          if (!serviceName) { console.error("ERROR: serviceName not found"); process.exit(1); }
+
+          const envFile = process.env.GITHUB_OUTPUT;
+          fs.appendFileSync(envFile, `service_name=${serviceName}\n`);
+          NODE
+
+  # --- Deploy ECS Dev ---
+  deploy_ecs_dev:
+    needs: [push_image, resolve_targets]
+    if: needs.resolve_targets.outputs.has_ecs_dev == 'true'
+    runs-on: ${{ fromJSON(inputs.runner_labels) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: "${{ inputs.cdk_app_dir }}/package-lock.json"
+
+      - name: Install CDK dependencies
+        run: cd "${{ inputs.cdk_app_dir }}" && npm ci
+
+      - name: Deploy ECS dev stack
+        run: |
+          cd "${{ inputs.cdk_app_dir }}"
+          npx cdk deploy "${{ needs.resolve_targets.outputs.service_name }}-dev" --require-approval never
+
+  # --- Deploy EKS Dev ---
+  deploy_eks_dev:
+    needs: [push_image, resolve_targets]
+    if: needs.resolve_targets.outputs.has_k8s_dev == 'true'
+    runs-on: ${{ fromJSON(inputs.runner_labels) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: "${{ inputs.cdk_app_dir }}/package-lock.json"
+
+      - name: Install CDK + kubectl (no sudo)
+        run: |
+          cd "${{ inputs.cdk_app_dir }}"
+          npm ci
+
+          KUBECTL_VERSION="$(curl -Ls https://dl.k8s.io/release/stable.txt)"
+          curl -sLO "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+          chmod +x kubectl
+
+          mkdir -p "${HOME}/.local/bin"
+          mv kubectl "${HOME}/.local/bin/kubectl"
+          echo "${HOME}/.local/bin" >> "${GITHUB_PATH}"
+
+          kubectl version --client=true
+
+      - name: Deploy EKS infra
+        run: |
+          cd "${{ inputs.cdk_app_dir }}"
+          npx cdk deploy "${{ needs.resolve_targets.outputs.service_name }}-k8s-dev" --require-approval never
+
+      - name: Deploy K8s manifests
+        run: |
+          cd "${{ inputs.cdk_app_dir }}"
+          chmod +x ./lib/constructs/platform/eks/manifest/scripts/deploy-manifests.sh
+          ./lib/constructs/platform/eks/manifest/scripts/deploy-manifests.sh \
+            --stack-name "${{ needs.resolve_targets.outputs.service_name }}-k8s-dev" \
+            --apply
+
+  # --- Test System Local instance - local code, real AWS deps (S3 etc) ---
+  verify_local_with_aws_deps:
+    needs: [deploy_ecs_dev, deploy_eks_dev, resolve_targets]
+    # Run if at least one dev deploy ran (use always() to handle skipped jobs)
+    if: |
+      always() &&
+      (needs.deploy_ecs_dev.result == 'success' || needs.deploy_ecs_dev.result == 'skipped') &&
+      (needs.deploy_eks_dev.result == 'success' || needs.deploy_eks_dev.result == 'skipped') &&
+      (needs.deploy_ecs_dev.result == 'success' || needs.deploy_eks_dev.result == 'success')
+    runs-on: ${{ fromJSON(inputs.runner_labels) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Verify local with AWS deps
+        run: |
+          cd "${{ inputs.spring_dir }}"
+          ./gradlew clean systemTest --no-daemon --console=plain --stacktrace --info
+
+  # --- Test System Remote - deployed instance ---
+  verify_remote_dev_stack:
+    needs: verify_local_with_aws_deps
+    runs-on: ${{ fromJSON(inputs.runner_labels) }}
+    steps:
+      - name: TODO - system test against deployed endpoints (curl /health etc.)
+        run: echo "Not implemented yet"
+
+  # --- Promote ECS to release ---
+  promote_ecs_to_release:
+    needs: [verify_remote_dev_stack, resolve_targets]
+    if: github.ref == 'refs/heads/master' && needs.resolve_targets.outputs.has_ecs_release == 'true'
+    runs-on: ${{ fromJSON(inputs.runner_labels) }}
+    environment:
+      name: env-release
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: "${{ inputs.cdk_app_dir }}/package-lock.json"
+
+      - name: Install Node deps
+        run: cd "${{ inputs.cdk_app_dir }}" && npm ci
+
+      - name: Deploy ECS release stack
+        run: |
+          cd "${{ inputs.cdk_app_dir }}"
+          npx cdk deploy "${{ needs.resolve_targets.outputs.service_name }}-release" --require-approval never
+
+      - name: Trigger blue/green deployment
+        run: |
+          cd "${{ inputs.cdk_app_dir }}"
+          chmod +x ./code_deploy/trigger_blue_green.sh
+          ./code_deploy/trigger_blue_green.sh
+
+  # --- Promote EKS to release ---
+  promote_eks_to_release:
+    needs: [verify_remote_dev_stack, resolve_targets]
+    if: github.ref == 'refs/heads/master' && needs.resolve_targets.outputs.has_k8s_release == 'true'
+    runs-on: ${{ fromJSON(inputs.runner_labels) }}
+    environment:
+      name: env-k8s-release
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: "${{ inputs.cdk_app_dir }}/package-lock.json"
+
+      - name: Install CDK + kubectl (no sudo)
+        run: |
+          cd "${{ inputs.cdk_app_dir }}"
+          npm ci
+
+          KUBECTL_VERSION="$(curl -Ls https://dl.k8s.io/release/stable.txt)"
+          curl -sLO "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+          chmod +x kubectl
+
+          mkdir -p "${HOME}/.local/bin"
+          mv kubectl "${HOME}/.local/bin/kubectl"
+          echo "${HOME}/.local/bin" >> "${GITHUB_PATH}"
+
+          kubectl version --client=true
+
+      - name: Deploy EKS release infra
+        run: |
+          cd "${{ inputs.cdk_app_dir }}"
+          npx cdk deploy "${{ needs.resolve_targets.outputs.service_name }}-k8s-release" --require-approval never
+
+      - name: Deploy K8s manifests
+        run: |
+          cd "${{ inputs.cdk_app_dir }}"
+          chmod +x ./lib/constructs/platform/eks/manifest/scripts/deploy-manifests.sh
+          ./lib/constructs/platform/eks/manifest/scripts/deploy-manifests.sh \
+            --stack-name "${{ needs.resolve_targets.outputs.service_name }}-k8s-release" \
+            --apply

@@ -1,0 +1,24 @@
+# service.yaml
+#
+# A ClusterIP Service routes traffic from the Ingress to your pods.
+# This is internal-only -- not reachable from outside the cluster.
+#
+# In ECS terms: this is what the ALB target group does (route to healthy containers).
+# The Ingress (next file) is the ALB itself.
+#
+# All __PLACEHOLDER__ tokens are resolved by the deploy-manifests script.
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: __SERVICE_NAME__
+  labels:
+    app: __SERVICE_NAME__
+spec:
+  type: ClusterIP
+  selector:
+    app: __SERVICE_NAME__   # Routes to pods with this label (matches deployment.yaml)
+  ports:
+    - port: 80              # Port the Service listens on (Ingress sends traffic here)
+      targetPort: __APP_PORT__  # Port on the pod (your Spring Boot app)
+      protocol: TCP

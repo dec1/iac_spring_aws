@@ -1,0 +1,16 @@
+# Configuration values used by both the spring app and the cdk (iac)
+
+
+# Container Image
+imageSource: "ecr"
+imageRepositoryName: "my-backend-img"
+
+# The name of the main (app) service to be deployed
+serviceName: "my-backend"
+
+# Application version - used by the app itself (eg swagger-ui), as the container image tag and as gradle (project) version
+appVersion: "19.7.3"
+
+# used by swagger-ui
+productName: "MyProduct"
+apiName: "Backend API"

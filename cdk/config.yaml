@@ -1,0 +1,114 @@
+# ------------------------------------------------------------------
+#             CDK specific configuration.
+# ------------------------------------------------------------------
+
+
+# ------------------------------------------------------------------------
+#   imported (config_common)
+# ------------------------------------------------------------------------
+# Values marked "null" below MUST be supplied by config_common.yaml
+# (at repo root). config-reader.ts merges both files at runtime and
+# will throw if any of these remain null after the merge.
+# ------------------------------------------------------
+
+# --- Supplied by config_common.yaml (do not set here) ---
+serviceName: null          # from config_common.yaml
+imageSource: null          # from config_common.yaml
+imageRepositoryName: null  # from config_common.yaml
+appVersion: null           # from config_common.yaml
+
+
+# ------------------------------------------------------------------------
+# ------------------------------------------------------------------------
+
+
+# --- Custom domain (optional) ---
+# Set both if you want to be able to serve your app via Https, and get:
+# - ACM certificates and Route 53 DNS records (e.g. dev.api.my-domain.com)
+# - HTTPS listener on the ALB (TLS terminates at the ALB)
+#
+# If you omit:
+# - your app will still be served via the ALB DNS name over HTTP only (no TLS)
+apexDomain:     ""    # e.g. "my-domain.com"
+hostedZoneId:   ""    # the Route 53 hosted zone ID managing DNS for the specified apexDomain
+
+
+
+# ---------------------------------------------------
+
+
+appPortNum: 8080
+terminationWaitTimeMinutes: 5
+wantGrafana: false
+
+ci:
+  gitlab:
+    url: "https://gitlab.com/"
+    runnerTokenSecretName: "GitlabRunnerToken-my-backend"       #  enter this value when creating runner 'connector' in GitLab ui (matches "tag" in .ci file)
+    runnerTag: "my-backend-runner-tag"                          #  enter this value as "tag"  in GitLab ui ( specify jobs that the runner can run)
+  github:
+    org: "dec1"
+    repo: "spring_aws"
+    runnerTokenSecretName: "GithubRunnerToken-my-backend"      # ........................................... in GitHub ui (matches "runner_labels" in .ci file)
+    runnerLabels:
+      - "my-backend-runner-label"                              #  ................... "label" ... GitHub ui .........
+
+# Shared defaults applied to every environment block below.
+# Environment-specific values override these (shallow merge).
+_defaults:
+  healthCheckPath: "/actuator/health"
+  s3BucketIsCdkManaged: true
+  computePlatform: "ecs"                       
+
+dev:
+  stagingEnvironment: "dev"                     # primarily used for tagging (cost tracking), and so runner can find the dev vpc to install into
+  s3BucketName: "my-backend-bucket-dev"
+  hostnamePrefix: "dev.api2"                     # prepended to apexDomain as fqdn for service (alb) 
+
+release:
+  stagingEnvironment: "release"                 
+  s3BucketName: "my-backend-bucket-release"    
+  hostnamePrefix: "api2"                         
+
+k8s-dev:
+  stagingEnvironment: "dev"       
+  computePlatform: "kubernetes"
+  s3BucketName: "my-backend-bucket-k8s-dev"
+  hostnamePrefix: "k8s.dev.api2"
+
+k8s-release:
+  stagingEnvironment: "release"
+  computePlatform: "kubernetes"
+  s3BucketName: "my-backend-bucket-k8s-release"
+  hostnamePrefix: "k8s.api2"
+
+#-------------------------------------------------------------------------------------------
+# EKS admin role ARN for local kubectl access (needed only for eks).
+
+# Leave blank to skip => only Ci (EksDeployRole) will have kubectl admin access.
+eksAdminRoleArn: ""
+
+# Deploying the cluster does NOT automatically grant kubectl admin.
+# The stack creates a dedicated EksDeployRole (and maps it into Kubernetes system:masters)
+# for CI, so that the runner has the appropriate permissions to 
+# set up the cluster, including the initial 'kubectl' calls it needs to make.
+# For you to be able to use kubectl yourself after the setup, your local identity needs to be mapped separately.
+#
+# Set this to the IAM role ARN of your local AWS identity. To find it:
+#
+#   $ aws sts get-caller-identity --query Arn --output text --profile <your-profile>
+#   arn:aws:sts::123456789012:assumed-role/AWSReservedSSO_AdminAccess_abc123/dec@example.com
+#
+# If the output is an arn:aws:sts::...assumed-role ARN (typical for SSO),
+# convert it: drop the session name (last segment) and change sts -> iam,
+# assumed-role -> role:
+#
+#   arn:aws:iam::123456789012:role/AWSReservedSSO_AdminAccess_abc123
+#
+# If the output is already an arn:aws:iam:: ARN (e.g. IAM user), use it as-is.
+#
+# Or as a one-liner:
+#
+#   aws sts get-caller-identity --query Arn --output text --profile <your-profile>  | sed -E 's|^arn:aws:sts::([0-9]+):assumed-role/(.+)/[^/]+$|arn:aws:iam::\1:role/\2|'
+#
+

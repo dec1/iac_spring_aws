@@ -1,0 +1,142 @@
+# deployment.yaml
+#
+# This is the K8s equivalent of your FargateServiceConstruct.
+# It tells K8s: "run N replicas of this container image, with these resources and health checks."
+#
+# All __PLACEHOLDER__ tokens are resolved by the deploy-manifests script.
+# Check status: kubectl get pods -l app=<service-name>
+# View logs:    kubectl logs -l app=<service-name> --tail=100
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: __SERVICE_NAME__
+  labels:
+    app: __SERVICE_NAME__
+spec:
+  # Replicas = desiredCount in ECS. The HPA (below) overrides this at runtime.
+  replicas: 1
+
+  selector:
+    matchLabels:
+      app: __SERVICE_NAME__
+
+  # Rolling update strategy (equivalent of ECS rolling deployment).
+  # maxSurge: 1 extra pod allowed during update (like maxHealthyPercent: 200%)
+  # maxUnavailable: 0 means never drop below desired count (like minHealthyPercent: 100%)
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+
+  template:
+    metadata:
+      labels:
+        app: __SERVICE_NAME__
+    spec:
+      containers:
+        - name: app
+          # Image URI is injected by deploy-manifests script.
+          # Format: <account>.dkr.ecr.<region>.amazonaws.com/<repo>:<tag>
+          image: "__ECR_IMAGE_URI__"
+
+          ports:
+            - containerPort: __APP_PORT__
+
+          # --- Environment variables (same as your containerEnvironment in app-stack.ts) ---
+          env:
+            - name: AWS_REGION
+              value: "__AWS_REGION__"
+            - name: SERVICE_NAME
+              value: "__SERVICE_NAME__"
+            - name: STAGING_ENVIRONMENT
+              value: "__STAGING_ENVIRONMENT__"
+            - name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI
+              value: "__ISSUER_URI__"
+            - name: S3_DATA_BUCKET
+              value: "__S3_BUCKET_NAME__"
+
+          # --- Resource requests/limits ---
+          # requests = guaranteed minimum (what the scheduler uses to place the pod)
+          # limits   = hard ceiling (pod gets OOM-killed or CPU-throttled if exceeded)
+          #
+          # These match your ECS taskCpu: 512, taskMemory: 1024
+          # Not templated because they rarely change and are K8s-specific (not in config.yaml).
+          # If you need to tune them, edit here directly.
+          resources:
+            requests:
+              cpu: "500m"       # 500 millicores = 0.5 vCPU
+              memory: "768Mi"   # Leave headroom below the limit for JVM overhead
+            limits:
+              cpu: "500m"
+              memory: "1024Mi"  # Hard limit = 1 GB (matches ECS taskMemory)
+
+          # --- Health checks ---
+          # readinessProbe: Is this pod ready to receive traffic?
+          #   K8s removes the pod from the Service (no traffic) until this passes.
+          #   Equivalent of your ALB target group health check.
+          readinessProbe:
+            httpGet:
+              path: __HEALTH_CHECK_PATH__
+              port: __APP_PORT__
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 3
+
+          # livenessProbe: Is this pod alive or stuck?
+          #   K8s restarts the pod if this fails repeatedly.
+          #   Equivalent of your ECS container health check.
+          livenessProbe:
+            httpGet:
+              path: __HEALTH_CHECK_PATH__
+              port: __APP_PORT__
+            initialDelaySeconds: 60    # Give Spring Boot time to start
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          # startupProbe: Is this pod still starting up?
+          #   K8s won't run liveness/readiness checks until this passes.
+          #   Equivalent of healthCheckGracePeriodSeconds in ECS (your 300s).
+          #   30 attempts * 10s = 300s max startup time.
+          startupProbe:
+            httpGet:
+              path: __HEALTH_CHECK_PATH__
+              port: __APP_PORT__
+            periodSeconds: 10
+            failureThreshold: 30
+
+      # --- Node scheduling ---
+      # No special affinity rules needed for dev. For release, you could add
+      # topologySpreadConstraints to spread pods across AZs (like ECS does automatically).
+
+---
+# Horizontal Pod Autoscaler
+# Equivalent of your ECS auto-scaling configuration in service.ts.
+# Watches CPU usage and scales replicas between min and max.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: __SERVICE_NAME__-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: __SERVICE_NAME__
+  minReplicas: 1    # Same as ServiceConfig.scaling.minCapacity
+  maxReplicas: 2    # Same as ServiceConfig.scaling.maxCapacityDev -- change to 10 for release
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70  # Same as targetCpuUtilizationPercent
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 60  # Same as scaleInCooldown
+    scaleUp:
+      stabilizationWindowSeconds: 60  # Same as scaleOutCooldown

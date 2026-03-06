@@ -1,0 +1,302 @@
+# .gitlab/ci-deploy.yml
+#
+# Push image + deploy stacks. Requires AWS credentials (instance role or injected).
+# Handles both ECS and EKS deployments, driven by config.yaml.
+# Included conditionally by the main .gitlab-ci.yml.
+
+
+# -------------------------------------------------------
+# Reusable snippets (shared by deploy jobs)
+# -------------------------------------------------------
+
+# Reusable snippet: export EC2 instance-role creds into the job container (IMDSv2),
+# so awscli/CDK work reliably from inside the container.
+#
+# _Note_: 169.254.169.254 is the EC2 Instance Metadata Service (IMDSv2) link-local endpoint.
+# GitLab jobs run inside Docker images; awscli/CDK in the container may not reliably pick up
+# the runner host's instance-role credentials automatically. We therefore fetch temporary
+# creds from IMDSv2 and export AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY/AWS_SESSION_TOKEN.
+# In GitHub Actions on a self-hosted EC2 runner (no job container), the AWS SDK/CLI can
+# usually reach IMDS directly, so this step isn't needed/visible.
+# If you want parity with Github Actions (no IMDS calls in the pipeline), inject credentials into the GitLab job
+# instead, so the container never needs IMDS:
+# - GitLab CI variables: AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_SESSION_TOKEN (+ AWS_REGION)
+# - Mount/provide an AWS config/credentials file for the job (AWS_SHARED_CREDENTIALS_FILE / AWS_CONFIG_FILE)
+# - Use OIDC to assume an AWS role (AssumeRoleWithWebIdentity) and export the resulting env vars
+.assume_instance_role_env: &assume_instance_role_env
+  - unset AWS_PROFILE AWS_DEFAULT_PROFILE
+  - |
+    bash -lc '
+      set -euo pipefail
+
+      # Ensure region is present (CDK and awscli both need it).
+      if [ -n "${AWS_REGION:-}" ]; then
+        export AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-$AWS_REGION}"
+      elif [ -n "${AWS_DEFAULT_REGION:-}" ]; then
+        export AWS_REGION="$AWS_DEFAULT_REGION"
+      else
+        echo "ERROR: AWS region not set. Provide AWS_REGION (preferred) or AWS_DEFAULT_REGION via GitLab variables or runner host env." >&2
+        exit 1
+      fi
+
+      TOKEN=$(curl -sS --max-time 2 -X PUT "http://169.254.169.254/latest/api/token" \
+        -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+      test -n "$TOKEN"
+
+      ROLE_NAME=$(curl -sS --max-time 2 -H "X-aws-ec2-metadata-token: $TOKEN" \
+        "http://169.254.169.254/latest/meta-data/iam/security-credentials/")
+      test -n "$ROLE_NAME"
+
+      CREDS_JSON=$(curl -sS --max-time 2 -H "X-aws-ec2-metadata-token: $TOKEN" \
+        "http://169.254.169.254/latest/meta-data/iam/security-credentials/$ROLE_NAME")
+      test -n "$CREDS_JSON"
+
+      export AWS_ACCESS_KEY_ID=$(python3 -c "import json,sys; print(json.loads(sys.argv[1])[\"AccessKeyId\"])" "$CREDS_JSON")
+      export AWS_SECRET_ACCESS_KEY=$(python3 -c "import json,sys; print(json.loads(sys.argv[1])[\"SecretAccessKey\"])" "$CREDS_JSON")
+      export AWS_SESSION_TOKEN=$(python3 -c "import json,sys; print(json.loads(sys.argv[1])[\"Token\"])" "$CREDS_JSON")
+
+      # Persist for subsequent script lines in the job
+      {
+        echo "AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID"
+        echo "AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY"
+        echo "AWS_SESSION_TOKEN=$AWS_SESSION_TOKEN"
+        echo "AWS_REGION=$AWS_REGION"
+        echo "AWS_DEFAULT_REGION=$AWS_DEFAULT_REGION"
+      } > /tmp/aws_env
+    '
+  # Load the AWS_* exports created above into the current shell (POSIX '.' = bash 'source')
+  - . /tmp/aws_env
+
+# Reusable snippet - setup for amazoncorretto/yum-based jobs requiring AWS CLI
+.aws_cli_yum_template:
+  before_script:
+    - yum install -y curl python3 python3-pip ca-certificates
+    - pip3 install --no-cache-dir awscli
+    - aws --version
+    - *assume_instance_role_env
+
+# Reusable snippet - setup for Node-based CDK tasks
+.cdk_node_template:
+  image: node:20-bookworm
+  before_script:
+    # Ensure this job can use the runner EC2 role reliably from inside the container
+    - apt-get update
+    - apt-get install -y --no-install-recommends curl python3 ca-certificates awscli jq
+    - aws --version
+    - *assume_instance_role_env
+    # Diagnostics that are now reliable (same creds CDK will use)
+    - aws sts get-caller-identity
+    - cd "$CDK_APP_DIR"
+
+    # Install dependencies BEFORE trying to run the yaml parser
+    - npm ci
+
+# --- FAIL-FAST YAML RESOLUTION ---
+    - |
+      set -euo pipefail
+
+      if [ -z "${CDK_SERVICE_NAME:-}" ]; then
+        CONFIG_FILE="../../config_common.yaml"
+
+        if [ ! -f "$CONFIG_FILE" ]; then
+          echo "ERROR: Config file not found: $CONFIG_FILE" >&2
+          exit 1
+        fi
+
+        SERVICE_LINE="$(grep -m1 -E '^[[:space:]]*serviceName[[:space:]]*:' "$CONFIG_FILE" || true)"
+        if [ -z "$SERVICE_LINE" ]; then
+          echo "ERROR: 'serviceName' is missing/empty in $CONFIG_FILE" >&2
+          exit 1
+        fi
+
+        serviceName="${SERVICE_LINE#*:}"
+        serviceName="${serviceName%%#*}"
+        serviceName="$(printf '%s' "$serviceName" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+
+        case "$serviceName" in
+          \"*\") serviceName="${serviceName#\"}"; serviceName="${serviceName%\"}" ;;
+          \'*\') serviceName="${serviceName#\'}"; serviceName="${serviceName%\'}" ;;
+        esac
+
+        if [ -z "$serviceName" ]; then
+          echo "ERROR: 'serviceName' is missing/empty in $CONFIG_FILE" >&2
+          exit 1
+        fi
+
+        if ! [[ "$serviceName" =~ ^[A-Za-z0-9][A-Za-z0-9-]*$ ]]; then
+          echo "ERROR: 'serviceName' has unsupported characters: $serviceName" >&2
+          exit 1
+        fi
+
+        printf "CDK_SERVICE_NAME=%s\nCDK_DEV_STACK=%s-dev\nCDK_RELEASE_STACK=%s-release\n" \
+          "$serviceName" "$serviceName" "$serviceName" > /tmp/cdk_stacks.env
+
+        set -a
+        . /tmp/cdk_stacks.env
+        set +a
+      fi
+      echo "CDK_SERVICE_NAME=${CDK_SERVICE_NAME}"
+      echo "CDK_DEV_STACK=${CDK_DEV_STACK}"
+      echo "CDK_RELEASE_STACK=${CDK_RELEASE_STACK}"
+
+# --- Resolve deploy targets from config.yaml ---
+    - pwd
+    - ls
+    - chmod +x ./ci/resolve-deploy-targets.sh
+    - eval $(./ci/resolve-deploy-targets.sh)
+    - echo "HAS_ECS_DEV=$HAS_ECS_DEV HAS_ECS_RELEASE=$HAS_ECS_RELEASE HAS_K8S_DEV=$HAS_K8S_DEV HAS_K8S_RELEASE=$HAS_K8S_RELEASE"
+
+# Reusable snippet - install kubectl (for EKS deploy jobs)
+.install_kubectl: &install_kubectl
+  - curl -sLO "https://dl.k8s.io/release/$(curl -Ls https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+  - install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+
+
+# -------------------------------------------------------
+# Jobs
+# -------------------------------------------------------
+
+# --- Push App Image to ECR (must happen before any CDK deploy that references it) ---
+push_image:
+  extends: .aws_cli_yum_template
+  stage: deploy_dev
+  needs: ["compile_and_unit_test"]
+  script:
+    - cd "$SPRING_DIR"
+
+    # Jib needs registry credentials via env vars.
+    # For ECR: username must be "AWS", password is from aws ecr get-login-password.
+    - export JIB_USERNAME="AWS"
+    - export JIB_PASSWORD="$(aws ecr get-login-password)"
+
+    # Push the image (tag comes from your Gradle 'version', currently read from version.txt).
+    - ./gradlew jib --no-daemon --console=plain
+  only:
+    - dev
+    - master
+
+# --- Deploy ECS Dev ---
+deploy_ecs_dev:
+  extends: .cdk_node_template
+  stage: deploy_dev
+  needs: ["push_image"]
+  script:
+    - |
+      if [ "$HAS_ECS_DEV" != "true" ]; then
+        echo "No ECS dev environment in config.yaml, skipping."
+        exit 0
+      fi
+    - npx cdk deploy "${CDK_SERVICE_NAME}-dev" --require-approval never
+  only:
+    - dev
+    - master
+
+# --- Deploy EKS Dev ---
+deploy_eks_dev:
+  extends: .cdk_node_template
+  stage: deploy_dev
+  needs: ["push_image"]
+  script:
+    - |
+      if [ "$HAS_K8S_DEV" != "true" ]; then
+        echo "No EKS dev environment in config.yaml, skipping."
+        exit 0
+      fi
+    # 1. Deploy EKS infra (cluster, LB controller, ExternalDNS, WAF, cert)
+    - npx cdk deploy "${CDK_SERVICE_NAME}-k8s-dev" --require-approval never
+
+    # 2. Install kubectl
+    - *install_kubectl
+
+    # 3. Resolve manifest placeholders and apply
+    - chmod +x ./lib/constructs/platform/eks/manifest/scripts/deploy-manifests.sh
+    - ./lib/constructs/platform/eks/manifest/scripts/deploy-manifests.sh --stack-name "${CDK_SERVICE_NAME}-k8s-dev" --apply
+  only:
+    - dev
+    - master
+
+# --- Test System Local instance - local code, real AWS deps (S3 etc) ---
+verify_local_with_aws_deps:
+  extends: .aws_cli_yum_template
+  stage: test_remote_dev
+  needs:
+    - job: deploy_ecs_dev
+      optional: true
+    - job: deploy_eks_dev
+      optional: true
+  script:
+    - set -euxo pipefail
+    - cd "$SPRING_DIR"
+
+    - aws sts get-caller-identity
+    - timeout 25m ./gradlew systemTest --no-daemon --console=plain --stacktrace --info
+
+  artifacts:
+    when: always
+    reports:
+      junit:
+        - "$SPRING_DIR/build/test-results/systemTest/*.xml"
+    paths:
+      - "$SPRING_DIR/build/reports/tests/systemTest/"
+
+  only:
+    - dev
+    - master
+
+# --- Test System Remote - deployed instance and S3 (Dev Stack) ---
+verify_remote_dev_stack:
+  stage: test_remote_dev
+  needs:
+    - job: deploy_ecs_dev
+      optional: true
+    - job: deploy_eks_dev
+      optional: true
+    - job: verify_local_with_aws_deps
+  script:
+    - set -euxo pipefail
+    - cd "${SPRING_DIR}/src/manualTest/resources"
+    - chmod +x ./manual_tests.sh    ## {EXT/INT_CLIENT_ID and EXT/INT_CLIENT_SECRET} need to be saved as variables in gitlab or pass `--local` here
+    # -  timeout 10m ./manual_tests.sh --local # not really a good fit for ci
+  only: [dev, master]
+
+# --- Promote ECS to release ---
+promote_ecs_to_release:
+  extends: .cdk_node_template
+  stage: deploy_release
+  needs: ["verify_remote_dev_stack"]
+  when: manual
+  allow_failure: false
+  script:
+    - |
+      if [ "$HAS_ECS_RELEASE" != "true" ]; then
+        echo "No ECS release environment in config.yaml, skipping."
+        exit 0
+      fi
+    - npx cdk deploy "${CDK_SERVICE_NAME}-release" --require-approval never
+
+    - chmod +x ./code_deploy/trigger_blue_green.sh
+    - ./code_deploy/trigger_blue_green.sh
+  only:
+    - master
+
+# --- Promote EKS to release ---
+promote_eks_to_release:
+  extends: .cdk_node_template
+  stage: deploy_release
+  needs: ["verify_remote_dev_stack"]
+  when: manual
+  allow_failure: false
+  script:
+    - |
+      if [ "$HAS_K8S_RELEASE" != "true" ]; then
+        echo "No EKS release environment in config.yaml, skipping."
+        exit 0
+      fi
+    - npx cdk deploy "${CDK_SERVICE_NAME}-k8s-release" --require-approval never
+
+    - *install_kubectl
+
+    - chmod +x ./lib/constructs/platform/eks/manifest/scripts/deploy-manifests.sh
+    - ./lib/constructs/platform/eks/manifest/scripts/deploy-manifests.sh --stack-name "${CDK_SERVICE_NAME}-k8s-release" --apply
+  only:
+    - master

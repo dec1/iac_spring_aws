@@ -1,0 +1,27 @@
+# .github/workflows/ci.yaml
+#
+# Main CI entry point. Calls the build workflow (always) and deploy workflow (comment out for open-source).
+
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - dev
+      - master
+
+
+jobs:
+  # any runner ok (github default or custom AWS)
+  build:
+    uses: ./.github/workflows/ci-build.yaml
+    with:
+      runner_labels: '["ubuntu-latest"]'
+
+ # custom AWS runner required
+  deploy:
+    needs: build
+    if: true       # Deploy to AWS  (requires AWS runner available - set "true" if available)
+    uses: ./.github/workflows/ci-deploy.yaml
+    with:
+      runner_labels: '["self-hosted", "linux", "x64", "my-backend-runner-label"]'

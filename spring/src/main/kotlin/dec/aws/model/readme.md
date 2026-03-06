@@ -1,0 +1,1 @@
+Data models or entities representing your application's data structures.

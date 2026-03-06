@@ -1,0 +1,1 @@
+Interfaces for data access, typically extending Spring Data JPA repositories.

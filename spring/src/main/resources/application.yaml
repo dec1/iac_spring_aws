@@ -1,0 +1,89 @@
+ # BASE Profile : Shared across all environments.
+# Profile-specific files (e.g., application-*.yaml) will override these values.
+# ==============================================================================
+
+
+# gradle will inject the contents of `config_common.yaml` (in the build dir) below during the gradle build process,
+# replacing the placeholder with
+# --------------------------
+# configCommon:
+#  app_version: 19.7.2
+#   <.....remainder of  `config_common.yaml`>
+# --------------------------
+
+# DO NOT EDIT the line between the separators below
+# --------------------------
+# configCommon_placeholder
+# --------------------------
+
+
+spring:
+
+  application:
+    name: s3-rest-demo
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+        # As part of client authentication, Spring (see SecurityConfig.kt) tries to resolve  a value for
+        # @Value("${spring.security.oauth2.resourceserver.jwt.issuer-uri:}")
+        # It does so by looking for
+        # 1) an env var of corresponding name/structure ie
+        # SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI  (this is generally set appropriately by CDK code based on identity stack deployed)
+        # If not set, it instead looks for
+        # 2)  a value set in the spring profile ie :
+
+          issuer-uri: https://cognito-idp.eu-west-3.amazonaws.com/eu-west-3_syDsZZaJ7
+          # this is just a fallback for local running/testing - the deployed app should always have the env var set
+
+
+app:
+  version: ${configCommon.appVersion}
+  productName: ${configCommon.productName}
+  apiName: ${configCommon.apiName}
+
+  aws:
+    region: ${AWS_REGION:eu-west-2}   # single source of truth with CDK/CI
+
+    # Needed by System Tests
+    serviceName: ${configCommon.serviceName}
+    identityStackName: ${configCommon.serviceName}-identity
+  s3:
+    # If S3_DATA_BUCKET environment variable is present (CDK sets this individually for dev and release stacks in Fargate).
+    # Otherwise (which is the case when running locally), falls back to the (hardcoded) dev bucket name.
+    bucket-name: ${S3_DATA_BUCKET:my-backend-bucket-dev}
+
+server:
+  port: 8080
+  # PROXY AWARENESS: Tells Spring to trust 'X-Forwarded-*' headers from the
+  # AWS Load Balancer. Essential for correct HTTPS link generation in Swagger.
+  #
+  # Default is NATIVE (delegates to Tomcat).
+  # We use FRAMEWORK (Spring Filter) because it is more reliable in AWS;
+  # it ensures HTTPS links are generated correctly even when the Load
+  # Balancer terminates SSL, without needing to whitelist ALB IP ranges.
+  forward-headers-strategy: FRAMEWORK
+
+logging:
+  level:
+    # CONFIG DEBUGGING: Set to DEBUG to see exactly how properties from
+    # different YAML files and env vars are being merged on startup.
+    org.springframework.core.env: DEBUG
+
+management:
+  endpoints:
+    web:
+      exposure:
+        # OBSERVABILITY: health,info,prometheus are safe for monitoring.
+        # SECURITY NOTE: Avoid "env", "beans", or "*" in production. They leak
+        # infrastructure maps, system paths, and internal bean wiring to anyone
+        # who finds the URL.
+        #
+        # DEBUG TIP: To quickly debug local config, temporarily add "env,beans"
+        # to the list below, or better yet, move them to application-*.yaml.
+        include: "health,info,metrics,prometheus"
+  endpoint:
+    health:
+      # DEPTH: Shows if S3/Network is actually "UP" rather than just a 200 OK.
+      show-details: when_authorized
