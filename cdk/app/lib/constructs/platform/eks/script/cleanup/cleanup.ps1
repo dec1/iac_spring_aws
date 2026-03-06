@@ -48,7 +48,7 @@ function Get-StackArn {
   $stacks.Stacks[0].StackId
 }
 
-$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$ScriptDir = $PSScriptRoot
 $GeneratedDir = Join-Path (Join-Path (Join-Path $ScriptDir "..") "..") (Join-Path "manifest" "generated")
 
 # NOTE:

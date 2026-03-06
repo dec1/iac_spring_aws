@@ -10,21 +10,22 @@ set -euo pipefail
 #
 # Usage:
 #   # Local (with profile):
-#   ./deploy-manifests.sh --stack-name my-backend-k8s-dev --profile myb --apply
-#
-#   # CI (uses ambient credentials):
-#   ./deploy-manifests.sh --stack-name my-backend-k8s-dev --apply
+#   ./deploy-manifests.sh --stackName my-backend-k8s-dev --profile myb --apply
 #
 #   # Resolve only (no apply):
-#   ./deploy-manifests.sh --stack-name my-backend-k8s-dev
+#   ./deploy-manifests.sh --stackName my-backend-k8s-dev --profile myb
+#
+#   # Optional region override (otherwise derived from stack ARN):
+#   ./deploy-manifests.sh --stackName my-backend-k8s-dev --region eu-west-2 --profile myb --apply
 #
 #   # Optional: force kubectl to assume a specific role when generating kubeconfig:
-#   ./deploy-manifests.sh --stack-name my-backend-k8s-dev --kubectl-role-arn arn:aws:iam::123:role/my-role --apply
+#   ./deploy-manifests.sh --stackName my-backend-k8s-dev --profile myb --kubectl-role-arn arn:aws:iam::123:role/my-role --apply
 # -------------------------------------------------------
 
 STACK_NAME=""
 IDENTITY_STACK_NAME=""
 PROFILE=""
+REGION=""
 APPLY=false
 REPO_ROOT=""
 KUBECTL_ROLE_ARN=""
@@ -47,27 +48,41 @@ ALB_CONTROLLER_LABEL="${ALB_CONTROLLER_LABEL:-app.kubernetes.io/name=aws-load-ba
 ALB_WEBHOOK_MAX_ATTEMPTS="${ALB_WEBHOOK_MAX_ATTEMPTS:-60}"
 ALB_WEBHOOK_SLEEP_SECONDS="${ALB_WEBHOOK_SLEEP_SECONDS:-5}"
 
+usage() {
+    echo "Usage: $0 --stackName <stack-name> --profile <profile> [--region <region>] [--identity-stack <name>] [--repo-root <path>] [--kubectl-role-arn <arn>] [--apply]"
+    exit 1
+}
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --stack-name)       STACK_NAME="$2"; shift 2 ;;
-        --identity-stack)   IDENTITY_STACK_NAME="$2"; shift 2 ;;
-        --profile)          PROFILE="$2"; shift 2 ;;
-        --repo-root)        REPO_ROOT="$2"; shift 2 ;;
-        --kubectl-role-arn) KUBECTL_ROLE_ARN="$2"; shift 2 ;;
-        --apply)            APPLY=true; shift ;;
-        *) echo "Unknown arg: $1"; exit 1 ;;
+        --stackName|--stack-name) STACK_NAME="$2"; shift 2 ;;
+        --identity-stack)         IDENTITY_STACK_NAME="$2"; shift 2 ;;
+        --profile)                PROFILE="$2"; shift 2 ;;
+        --region)                 REGION="$2"; shift 2 ;;
+        --repo-root)              REPO_ROOT="$2"; shift 2 ;;
+        --kubectl-role-arn)       KUBECTL_ROLE_ARN="$2"; shift 2 ;;
+        --apply)                  APPLY=true; shift ;;
+        -h|--help)                usage ;;
+        *) echo "Unknown arg: $1"; usage ;;
     esac
 done
 
-if [[ -z "$STACK_NAME" ]]; then
-    echo "Usage: $0 --stack-name <stack-name> [--profile <profile>] [--identity-stack <name>] [--repo-root <path>] [--kubectl-role-arn <arn>] [--apply]"
-    exit 1
+if [[ -z "$STACK_NAME" || -z "$PROFILE" ]]; then
+    usage
 fi
 
 # -------------------------------------------------------
 # Resolve paths
 # -------------------------------------------------------
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_PATH="${BASH_SOURCE[0]}"
+if [[ "$SCRIPT_PATH" != /* ]]; then
+    SCRIPT_PATH="$(command -v -- "$SCRIPT_PATH" 2>/dev/null || true)"
+fi
+if [[ -z "$SCRIPT_PATH" || ! -e "$SCRIPT_PATH" ]]; then
+    echo "ERROR: unable to resolve script path for $0" >&2
+    exit 1
+fi
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
 TEMPLATE_DIR="$SCRIPT_DIR/../../manifest/template"
 GENERATED_DIR="$SCRIPT_DIR/../../manifest/generated"
 
@@ -230,8 +245,12 @@ fi
 # In "no custom domain" mode the cert output is intentionally a placeholder string,
 # which then breaks AWS CLI region parsing.
 STACK_ARN=$(get_stack_arn "$STACK_NAME")
-AWS_REGION=$(echo "$STACK_ARN" | cut -d: -f4)
+AWS_REGION_FROM_STACK=$(echo "$STACK_ARN" | cut -d: -f4)
 ACCOUNT_ID=$(echo "$STACK_ARN" | cut -d: -f5)
+AWS_REGION="$AWS_REGION_FROM_STACK"
+if [[ -n "$REGION" ]]; then
+    AWS_REGION="$REGION"
+fi
 
 if [[ -z "$AWS_REGION" || -z "$ACCOUNT_ID" || "$AWS_REGION" == "None" || "$ACCOUNT_ID" == "None" ]]; then
     echo "ERROR: Failed to derive region/account from stack ARN: $STACK_ARN"

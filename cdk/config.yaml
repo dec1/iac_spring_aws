@@ -86,6 +86,8 @@ k8s-release:
 # EKS admin role ARN for local kubectl access (needed only for eks).
 
 # Leave blank to skip => only Ci (EksDeployRole) will have kubectl admin access.
+# But you can (re)gain it at any time using `cdk\app\lib\constructs\platform\eks\script\fix-eks-access` script
+
 eksAdminRoleArn: ""
 
 # Deploying the cluster does NOT automatically grant kubectl admin.

@@ -49,7 +49,7 @@ $AlbWebhookSleepSecs   = $env:ALB_WEBHOOK_SLEEP_SECONDS;  if (-not $AlbWebhookSl
 # -------------------------------------------------------
 # Resolve paths
 # -------------------------------------------------------
-$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$ScriptDir = $PSScriptRoot
 $TemplateDir = Join-Path (Join-Path (Join-Path $ScriptDir "..") "..") (Join-Path "manifest" "template")
 $GeneratedDir = Join-Path (Join-Path (Join-Path $ScriptDir "..") "..") (Join-Path "manifest" "generated")
 
