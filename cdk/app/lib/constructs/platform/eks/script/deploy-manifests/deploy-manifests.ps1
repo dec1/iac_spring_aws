@@ -50,8 +50,8 @@ $AlbWebhookSleepSecs   = $env:ALB_WEBHOOK_SLEEP_SECONDS;  if (-not $AlbWebhookSl
 # Resolve paths
 # -------------------------------------------------------
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$TemplateDir = Join-Path (Join-Path $ScriptDir "..") "template"
-$GeneratedDir = Join-Path (Join-Path $ScriptDir "..") "generated"
+$TemplateDir = Join-Path (Join-Path (Join-Path $ScriptDir "..") "..") (Join-Path "manifest" "template")
+$GeneratedDir = Join-Path (Join-Path (Join-Path $ScriptDir "..") "..") (Join-Path "manifest" "generated")
 
 if (-not $RepoRoot) {
     # Default: assume script is at <repo>/cdk/app/lib/constructs/platform/eks/manifest/scripts/

@@ -49,7 +49,7 @@ function Get-StackArn {
 }
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$GeneratedDir = Join-Path (Join-Path (Join-Path $ScriptDir "..") "..") "generated"
+$GeneratedDir = Join-Path (Join-Path (Join-Path $ScriptDir "..") "..") (Join-Path "manifest" "generated")
 
 # NOTE:
 # We must NOT derive region from the ACM cert ARN.

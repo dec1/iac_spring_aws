@@ -68,8 +68,8 @@ fi
 # Resolve paths
 # -------------------------------------------------------
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-TEMPLATE_DIR="$SCRIPT_DIR/../template"
-GENERATED_DIR="$SCRIPT_DIR/../generated"
+TEMPLATE_DIR="$SCRIPT_DIR/../../manifest/template"
+GENERATED_DIR="$SCRIPT_DIR/../../manifest/generated"
 
 if [[ -z "$REPO_ROOT" ]]; then
     # Default: assume script is at <repo>/cdk/app/lib/constructs/platform/eks/manifest/scripts/
