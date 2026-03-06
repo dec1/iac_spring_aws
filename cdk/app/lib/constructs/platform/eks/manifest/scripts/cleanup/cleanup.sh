@@ -41,7 +41,7 @@ get_stack_arn() {
 }
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-MANIFEST_ROOT="$SCRIPT_DIR/../"               # scripts/../
+MANIFEST_ROOT="$SCRIPT_DIR/../../"              
 GENERATED_DIR="$MANIFEST_ROOT/generated"
 
 # NOTE:
