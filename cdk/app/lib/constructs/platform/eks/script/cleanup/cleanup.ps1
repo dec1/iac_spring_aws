@@ -1,6 +1,6 @@
 # cleanup-manifests.* is required because some AWS resources (notably the ALB, target groups, and related SG rules)
 # are created indirectly by the AWS Load Balancer Controller when you `kubectl apply` an Ingress.
-# CloudFormation/CDK does not “own” those controller-created resources, so `cdk destroy` can fail if they still exist
+# CloudFormation/CDK does not "own" those controller-created resources, so `cdk destroy` can fail if they still exist
 # or are still being cleaned up.
 #
 # This script deletes the Kubernetes manifests first (especially Ingress), waits for controller cleanup to finish,
@@ -66,7 +66,7 @@ if ($Profile) { $kubeconfigArgs += @("--profile",$Profile) }
 & aws @kubeconfigArgs | Out-Null
 
 if (Test-Path $GeneratedDir) {
-  Write-Host "Deleting manifests from $GeneratedDir ..."
+  Write-Host "Deleting resources defined in manifests from $GeneratedDir ..."
   & kubectl delete -f $GeneratedDir --ignore-not-found=true | Out-Null
 } else {
   Write-Warning "$GeneratedDir not found. If you applied from template/ or elsewhere, delete those manifests manually."
@@ -74,7 +74,7 @@ if (Test-Path $GeneratedDir) {
 
 Write-Host "Waiting for Ingress resources to be deleted (and ALB cleanup to finish) ..."
 for ($i = 0; $i -lt 60; $i++) {
-  $out = & kubectl get ingress --all-namespaces 2>$null
+  $out = & kubectl get ingress --all-namespaces -o name 2>$null
   if ($LASTEXITCODE -eq 0 -and $out -match '\S') {
     Start-Sleep -Seconds 10
   } else {

@@ -65,11 +65,12 @@ fi
 # Wait for ingress cleanup (best-effort). If you know the ingress name, you can target it explicitly.
 echo "Waiting for Ingress resources to be deleted (and ALB cleanup to finish) ..."
 for i in {1..60}; do
-  if kubectl get ingress --all-namespaces 2>/dev/null | grep -q .; then
+  if kubectl get ingress --all-namespaces -o name 2>/dev/null | grep -q .; then
     sleep 10
   else
     break
   fi
 done
+
 
 echo "Cleanup done. Now run: cdk destroy"
