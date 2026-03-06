@@ -42,10 +42,12 @@ terminationWaitTimeMinutes: 5
 wantGrafana: false
 
 ci:
-  gitlab:
-    url: "https://gitlab.com/"
-    runnerTokenSecretName: "GitlabRunnerToken-my-backend"       #  enter this value when creating runner 'connector' in GitLab ui (matches "tag" in .ci file)
-    runnerTag: "my-backend-runner-tag"                          #  enter this value as "tag"  in GitLab ui ( specify jobs that the runner can run)
+
+  # gitlab:
+  #   url: "https://gitlab.com/"
+  #   runnerTokenSecretName: "GitlabRunnerToken-my-backend"       #  enter this value when creating runner 'connector' in GitLab ui (matches "tag" in .ci file)
+  #   runnerTag: "my-backend-runner-tag"                          #  enter this value as "tag"  in GitLab ui ( specify jobs that the runner can run)
+  
   github:
     org: "dec1"
     repo: "spring_aws"
