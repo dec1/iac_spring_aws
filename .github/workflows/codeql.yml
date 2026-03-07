@@ -1,9 +1,11 @@
 # .github/workflows/codeql.yml
 #
 # CodeQL security analysis workflow for Kotlin/Spring Gradle projects.
-# Uses manual build mode to avoid autobuild memory issues.
+# Uses manual build mode to avoid autobuild memory issues and keeps the run
+# clearly distinguishable from the main CI/CD pipeline.
 
-name: "CodeQL Analysis"
+name: "Security Scan (CodeQL)"
+run-name: "CodeQL security scan for ${{ github.ref_name }}"
 
 on:
   push:
@@ -15,7 +17,7 @@ on:
 
 jobs:
   analyze:
-    name: Analyze (java-kotlin)
+    name: Static Security Analysis (CodeQL)
     runs-on: ubuntu-latest
 
     permissions:
@@ -49,8 +51,9 @@ jobs:
           build-mode: ${{ matrix.build-mode }}
 
       # Compile the project so CodeQL can observe the compiler
-      - name: Build project for CodeQL
+      - name: Compile project for CodeQL analysis
         if: matrix.build-mode == 'manual'
+        working-directory: spring
         run: |
           export GRADLE_OPTS="-Xmx4g"
           ./gradlew clean classes testClasses --no-daemon
