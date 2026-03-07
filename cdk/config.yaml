@@ -50,7 +50,7 @@ ci:
   
   github:
     org: "dec1"
-    repo: "spring_aws"
+    repo: "iac_spring_aws"                                         # git repo name - which runner is "working" for. github requires you specify. (gitlab doesnt - presumably encoded in the token instead)
     runnerTokenSecretName: "GithubRunnerToken-my-backend"      # ........................................... in GitHub ui (matches "runner_labels" in .ci file)
     runnerLabels:
       - "my-backend-runner-label"                              #  ................... "label" ... GitHub ui .........
