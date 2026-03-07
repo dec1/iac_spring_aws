@@ -85,34 +85,43 @@ k8s-release:
   hostnamePrefix: "k8s.api2"
 
 #-------------------------------------------------------------------------------------------
-# EKS admin role ARN for local kubectl access (needed only for eks).
+# EKS admin role ARN for local kubectl access (EKS only).
 
-# Leave blank to skip => only Ci (EksDeployRole) will have kubectl admin access.
-# But you can (re)gain it at any time using `cdk\app\lib\constructs\platform\eks\script\fix-eks-access` script
+# Leave empty => only CI (EksDeployRole) will have kubectl admin access.
+# You can regain access later using:
+#   cdk/app/lib/constructs/platform/eks/script/fix-eks-access
 
 eksAdminRoleArn: ""
 
-# Deploying the cluster does NOT automatically grant kubectl admin.
-# The stack creates a dedicated EksDeployRole (and maps it into Kubernetes system:masters)
-# for CI, so that the runner has the appropriate permissions to 
-# set up the cluster, including the initial 'kubectl' calls it needs to make.
-# For you to be able to use kubectl yourself after the setup, your local identity needs to be mapped separately.
+# EKS uses AWS IAM authentication for Kubernetes access.
+# Creating the cluster does NOT automatically grant kubectl access to your local identity.
 #
-# Set this to the IAM role ARN of your local AWS identity. To find it:
+# During deployment the stack creates an EksDeployRole that CI assumes.
+# This role is mapped to Kubernetes `system:masters` so CI can configure the cluster.
 #
-#   $ aws sts get-caller-identity --query Arn --output text --profile <your-profile>
-#   arn:aws:sts::123456789012:assumed-role/AWSReservedSSO_AdminAccess_abc123/dec@example.com
+# The CI role follows the principle of least privilege: it only receives the
+# permissions required to deploy and configure the cluster. Its permissions are
+# constrained by the IAM privileges of the identity that performs the initial
+# CDK deployment (i.e., you or whoever bootstraps/deploys the stack locally).
 #
-# If the output is an arn:aws:sts::...assumed-role ARN (typical for SSO),
-# convert it: drop the session name (last segment) and change sts -> iam,
-# assumed-role -> role:
+# If you want kubectl access from your local machine, set this value to the IAM role
+# ARN of your AWS identity so it is mapped during cluster creation.
+
+# Get your current identity ARN:
+#   aws sts get-caller-identity --query Arn --output text --profile <your-profile>
 #
+# Example output (SSO session):
+#   arn:aws:sts::123456789012:assumed-role/AWSReservedSSO_AdminAccess_abc123/user@example.com
+#
+# Convert it to the IAM role ARN by removing the session name and replacing:
+#   sts -> iam
+#   assumed-role -> role
+#
+# Result:
 #   arn:aws:iam::123456789012:role/AWSReservedSSO_AdminAccess_abc123
 #
-# If the output is already an arn:aws:iam:: ARN (e.g. IAM user), use it as-is.
+# If the command already returns an arn:aws:iam:: ARN, use it directly.
 #
-# Or as a one-liner:
-#
-#   aws sts get-caller-identity --query Arn --output text --profile <your-profile>  | sed -E 's|^arn:aws:sts::([0-9]+):assumed-role/(.+)/[^/]+$|arn:aws:iam::\1:role/\2|'
-#
-
+# One-liner conversion:
+#   aws sts get-caller-identity --query Arn --output text --profile <your-profile> \
+#   | sed -E 's|^arn:aws:sts::([0-9]+):assumed-role/(.+)/[^/]+$|arn:aws:iam::\1:role/\2|'
