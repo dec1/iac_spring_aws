@@ -53,7 +53,7 @@ The rest of this document covers the one-time setup that makes that workflow pos
 | [manualTest](spring/src/manualTest/manualTest.md) | End-to-end manual test setup and execution |
 | [cdk](cdk/cdk.md)  | CDK stacks, config.yaml, AWS infrastructure (VPC, WAF, ECS/EKS, S3, IAM), first-time deploy commands |
 | [eks](cdk/app/lib/constructs/platform/eks/eks.md) | EKS getting started, kubectl setup, manifest deployment, architecture comparison |
-| [manifest](cdk/app/lib/constructs/platform/eks/manifest/readme.md) | K8s manifest templates, deploy-manifests script usage |
+| [manifests & kubectl](cdk/app/lib/constructs/platform/eks/manifest/readme.md) | K8s manifest templates, and cluster access via kubectl |
 | [idp](cdk/app/idp/idp.md)  | Cognito identity provider setup, client scopes, credential retrieval scripts |
 | [ci](cdk/app/ci/ci.md) | CI/CD pipeline stages, runner infrastructure, secrets, GitLab vs GitHub differences |
 | [issues](issues.md) | Known issues and workarounds |

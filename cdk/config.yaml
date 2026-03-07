@@ -27,8 +27,7 @@ appVersion: null           # from config_common.yaml
 # - ACM certificates and Route 53 DNS records (e.g. dev.api.my-domain.com)
 # - HTTPS listener on the ALB (TLS terminates at the ALB)
 #
-# If you omit:
-# - your app will still be served via the ALB DNS name over HTTP only (no TLS)
+# If you omit these your app will still be served via the default ALB DNS name but only over HTTP  (no HTTPS/TLS)
 apexDomain:     ""    # e.g. "my-domain.com"
 hostedZoneId:   ""    # the Route 53 hosted zone ID managing DNS for the specified apexDomain
 

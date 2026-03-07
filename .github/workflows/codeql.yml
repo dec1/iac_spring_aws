@@ -64,7 +64,11 @@ jobs:
           ( while true; do echo "[heartbeat] Kotlin compilation still running..."; sleep 60; done ) &
           HEARTBEAT_PID=$!
 
-          # Added -Dorg.gradle.jvmargs to allocate 4GB to the build process
+
+          # CodeQL process tracing cannot monitor background daemons.
+          # We force both Gradle (--no-daemon) and Kotlin (-Pkotlin.compiler.execution.strategy=in-process) 
+          # to compile in the current visible process, and allocate 4GB RAM to handle the load.
+
           ./gradlew clean classes testClasses \
             -Dorg.gradle.jvmargs="-Xmx4g" \
             --no-daemon \
