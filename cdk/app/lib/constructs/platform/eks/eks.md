@@ -1,7 +1,11 @@
 # EKS Getting Started Guide
 
-With your EKS cluster (`<serviceName>-dev`) successfully running in `AWS_REGION`, 
-this guide covers local `kubectl` setup, deploying your app, and useful AWS console views.
+This guide covers what you need to know after your Kubernetes cluster is setup and running
+eg local `kubectl` setup, deploying your app, and useful AWS console views.
+
+
+By default, your Kubernetes 
+**`<clusterName>`** is **`<serviceName>-k8s-dev|release`**
 
 
 ## 1. Prerequisites
@@ -9,6 +13,7 @@ this guide covers local `kubectl` setup, deploying your app, and useful AWS cons
 Install these locally if you don't have them already:
 
 - **AWS CLI v2**: https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html
+    - make sure your local aws credentials are valid (refreshed)
 - **kubectl**: https://kubernetes.io/docs/tasks/tools/install-kubectl-windows/ (or via `choco install kubernetes-cli` on Windows)
 - **Verify versions**:
 
@@ -28,7 +33,7 @@ Install these locally if you don't have them already:
 This tells kubectl how to talk to your EKS control plane. Run the command from the CDK output:
 
 
-`aws eks update-kubeconfig --name my-backend-dev --region eu-west-2 --profile myb`
+`aws eks update-kubeconfig --name <clusterName> --region <region> --profile <profile>`
 
 
 This writes a context entry to `~/.kube/config`. 
@@ -86,30 +91,11 @@ The LB Controller pods should show `Running` with `1/1` ready. If they're not th
 
 ## 4. Deploy your application
 
-#### 4a. Verify your image exists in ECR
 
-The EKS worker nodes pull images from ECR automatically using their IAM instance role (no Docker login needed -- that's only for local development). Just confirm the image is there:
-
-```
-aws ecr describe-images --repository-name my-backend-img --image-ids imageTag=19.7.3 --region eu-west-2 --profile myb
-```
-
-
-#### 4b. Fill in the Manifest placeholders
-
-The K8s manifest files contain placeholder values that you need to replace with real values from your CDK deployment. All placeholders are clearly marked with `PLACEHOLDER:` comments in the YAML files. Scripts are provided for automatic replacement - see See [manifests](manifest/readme.md)
+See [deploy manifests](manifest/readme.md)
 
 
 
-
-If this returns image details, you're good. If it returns an error, push the image to ECR first before applying the K8s manifests. If your pods show `ImagePullBackOff` after applying, check `kubectl describe pod <pod-name>` for the exact error.
-
-
-#### 4c. Apply the manifests
-
-```bash
-kubectl apply -f <path_to_manifests>/manifest/
-```
 
 This creates the Deployment, Service, Ingress, and HPA in one shot. Check progress:
 
@@ -133,32 +119,10 @@ This creates the Deployment, Service, Ingress, and HPA in one shot. Check progre
 
 Wait until the `ADDRESS` column shows an ALB hostname.
 
+- ####  Cleanup
+    If you no longer need your cluster, make sure [undo the manifest deployment](manifest/readme.md), before destroying the cdk stack.
 
-#### 4d. DNS (automatic via ExternalDNS)
-
-ExternalDNS is installed by CDK and runs as a pod in your cluster. It watches Ingress resources for the `external-dns.alpha.kubernetes.io/hostname` annotation and automatically creates/updates/deletes Route53 A records.
-
-No manual DNS step needed. After the ALB gets its address (~2-3 min), ExternalDNS creates the Route53 record within ~1 minute.
-
-Check ExternalDNS logs to confirm:
-```
-kubectl logs -n kube-system -l app.kubernetes.io/name=external-dns --tail=10
-```
-
-You should see lines like:  
-```
-Desired change: CREATE k8s.dev.api2.my-domain.com A
-4 record(s) were successfully updated
-```
-
-When you `kubectl delete` the Ingress, ExternalDNS removes the Route53 record automatically.
-
-After DNS propagates (usually < 1 minute), test:
-```
-curl https://k8s.dev.api2.my-domain.com/actuator/health
-```
-
-If DNS doesn't resolve immediately, flush your local cache: `ipconfig /flushdns` (Windows) or `sudo dscacheutil -flushcache` (Mac).
+    Order matters: if you destroy the CDK stack first, the ALB created by the Ingress controller becomes orphaned (CDK doesn't know about it) and you'd have to delete it (and many other resources) manually in the EC2 console. 
 
 
 ## 5. Useful kubectl commands
@@ -198,54 +162,40 @@ kubectl delete -f k8s/                     # Remove all K8s resources (ALB + DNS
 
 ## 6. AWS Console resources
 
-### EKS Console
-**Console -> EKS -> Clusters -> `<serviceName>-dev`**
+#### EKS Console
+*Console -> EKS -> Clusters -> `<clusterName>`*
 
-- **Overview tab**: Cluster status, K8s version, API server endpoint, OIDC provider
-- **Compute tab**: Your managed node group, instance types, scaling config, node health
-- **Resources tab**: Browse K8s objects (Deployments, Pods, Services, Ingresses) directly in the console without kubectl. Useful for quick checks
-- **Add-ons tab**: Shows installed add-ons (VPC CNI, CoreDNS, kube-proxy)
+- *Overview* -  Cluster status, K8s version, API server endpoint, OIDC provider
+- *Compute* -  Your managed node group, instance types, scaling config, node health
+- *Resources* -  Browse K8s objects (Deployments, Pods, Services, Ingresses) directly in the console without kubectl. Useful for quick checks
+- *Add-ons* -  Shows installed add-ons (VPC CNI, CoreDNS, kube-proxy)
 
-### EC2 Console
-**Console -> EC2 -> Instances**
+#### EC2 Console
+*Console -> EC2 -> Instances*
 
-Filter by tag `eks:cluster-name = <serviceName>-dev` to see your worker nodes. You can check CPU/memory utilization, network traffic, and instance status here.
+Filter by tag `eks:cluster-name = <clusterName>` to see your worker nodes. You can check CPU/memory utilization, network traffic, and instance status here.
 
-### CloudWatch
-**Console -> CloudWatch -> Container Insights** (if enabled)
+#### CloudWatch
+*Console -> CloudWatch -> Container Insights* (if enabled)
 
 Shows cluster-level and pod-level metrics: CPU, memory, network, disk. Useful for understanding resource usage patterns before tuning your HPA thresholds.
 
-**Console -> CloudWatch -> Log Groups**
+*Console -> CloudWatch -> Log Groups*
 
-EKS control plane logs (if enabled) appear under `/aws/eks/<serviceName>-dev/cluster`. Application logs go to stdout/stderr and can be collected by installing a log agent (e.g., Fluent Bit DaemonSet) -- not set up by default.
+EKS control plane logs (if enabled) appear under `/aws/eks/<clusterName>/cluster`. Application logs go to stdout/stderr and can be collected by installing a log agent (e.g., Fluent Bit DaemonSet) -- not set up by default.
 
-### WAF Console
-**Console -> WAF & Shield -> Web ACLs** (region: eu-west-2)
+#### WAF Console
+*Console -> WAF & Shield -> Web ACLs* 
 
 Once the Ingress creates the ALB and the WAF is associated, you'll see request metrics, blocked requests, and rule match details here. Same WAF setup as your ECS environment.
 
-### Route 53
-**Console -> Route 53 -> Hosted Zones -> my-domain.com**
+#### Route 53
+*Console -> Route 53 -> Hosted Zones -> your-domain.com*
 
 ExternalDNS manages the alias record pointing your hostname to the Ingress-created ALB. You can verify it exists here, but you shouldn't need to create or edit it manually.
 
 
-## 7. Tearing down
 
-To remove everything:
-
-```bash
-# 1. Delete K8s resources first (this deletes the Ingress-created ALB + DNS record)
-kubectl delete -f <path_to_manifests>/manifest/
-
-# 2. Wait for the ALB to be fully deleted (check EC2 -> Load Balancers)
-
-# 3. Destroy the CDK stack
-cdk destroy <serviceName>-k8s-dev --profile myb
-```
-
-Order matters: if you destroy the CDK stack first, the ALB created by the Ingress controller becomes orphaned (CDK doesn't know about it) and you'd have to delete it manually in the EC2 console. The Route53 record would also be orphaned.
 
 
 ## 8. Costs summary (dev environment)
@@ -263,159 +213,3 @@ For comparison, your ECS Fargate dev setup costs roughly $50-80/month. The EKS p
 To minimize costs when not actively using the cluster, destroy the stack entirely (`cdk destroy`) and redeploy when needed (~16 minutes).
 
 
-## 9. Architecture comparison
-
-### This setup (CDK infra + kubectl workloads)
-
-CDK and kubectl each own a clearly separated set of resources. CDK builds the platform; kubectl deploys the app onto it.
-
-```
-cdk deploy                                  kubectl apply -f k8s/
-(runs once to build infrastructure)         (runs per app deployment)
-    |                                            |
-    v                                            v
-  VPC, subnets, NAT Gateway                    Deployment (pods running your Spring Boot app)
-  EKS cluster (control plane)                  Service (internal routing to pods)
-  Managed node group (EC2 workers)             Ingress (triggers ALB + DNS record creation)
-  AWS LB Controller                            HPA (auto-scaling rules)
-  ExternalDNS
-  WAF WebACL
-  ACM certificate
-  IAM roles, OIDC provider
-```
-
-**How CDK installs the LB Controller and ExternalDNS:** CDK doesn't just create AWS resources
--- when it creates an EKS cluster, it also provisions a hidden Lambda function with kubectl/helm
-baked in (that's what the `KubectlV35Layer` is for). When your CDK code says
-`cluster.addHelmChart(...)`, CloudFormation invokes that Lambda to run `helm install` inside
-the cluster during `cdk deploy`. You never see this happen -- it's all behind the scenes.
-After deployment, CDK's Lambda goes dormant and the controllers run as regular pods
-inside your cluster.
-
-**Why the LB Controller creates the ALB (rather than CDK creating it directly):** The ALB's
-target group needs to know which pod IPs are healthy, and that changes constantly -- pods
-scale up, roll out, crash, restart. Only something running continuously inside the cluster
-can keep the target group in sync with live pod state. CDK runs once at deploy time and
-stops, so it can't do this.
-
-In theory, CDK could create the ALB and hand a reference to a controller that only manages
-target group registrations. That would work fine, but nobody built that tool -- the K8s
-ecosystem's standard pattern is for the LB Controller to create and fully manage the ALB
-end-to-end. It's the off-the-shelf solution.
-
-**Why ExternalDNS creates the Route53 record (rather than CDK):** Same reason -- the ALB
-doesn't exist at CDK deploy time, so CDK can't create a DNS record pointing to it.
-ExternalDNS watches the Ingress, waits for the ALB address to appear, then creates the
-Route53 alias record. When the Ingress is deleted, ExternalDNS deletes the record.
-
-```
-Internet
-  |
-  v
-Route53 (k8s.dev.api2.my-domain.com -> ALB)   [managed by ExternalDNS]
-  |
-  v
-ALB (created and managed by LB Controller)
-  |  - HTTPS/443 with ACM cert
-  |  - WAF attached
-  |  - Target group kept in sync with live pod IPs
-  v
-Worker nodes (EC2 in private subnets)
-  |
-  v
-Pods (your Spring Boot containers)
-  |
-  v
-S3, Cognito, etc. (via IAM roles)
-```
-
-
-### ECS setup (current, everything in CDK)
-
-CDK creates and owns every resource, including the ALB and container services. There is no separate deployment step -- `cdk deploy` does it all.
-
-```
-cdk deploy
-(runs for both infra changes AND app deployments)
-    |
-    v
-  VPC, subnets, NAT Gateway
-  ECS cluster (just a logical grouping, no running processes)
-  ALB + HTTPS listener + target groups
-  WAF associated to ALB
-  ACM certificate
-  Route53 DNS record
-  Fargate task definitions + services (blue/green)
-  Auto-scaling rules
-  CodeDeploy (for blue/green in release)
-  IAM roles
-```
-
-```
-Internet
-  |
-  v
-ALB (created directly by CDK)
-  |  - HTTPS/443 with ACM cert
-  |  - WAF attached
-  v
-Fargate tasks (serverless, no EC2 to manage)
-  |
-  v
-Pods (your Spring Boot containers)
-  |
-  v
-S3, Cognito, etc. (via IAM task role)
-```
-
-Key difference: In ECS there are no worker nodes -- AWS runs your containers on shared infrastructure (Fargate). You never see or manage EC2 instances.
-
-
-### Old K8s approach (CDK manages everything, the workload.ts approach)
-
-CDK creates the cluster AND applies K8s manifests (Deployment, Service, Ingress) via a Lambda function that calls kubectl behind the scenes. One `cdk deploy` does everything.
-
-```
-cdk deploy
-(runs for both infra changes AND app deployments)
-    |
-    v
-  VPC, subnets, NAT Gateway
-  EKS cluster + node group
-  LB Controller
-  WAF, ACM cert
-  IAM roles
-  AND via the same hidden Lambda (see above):
-    K8s Deployment (pods)
-    K8s Service (internal routing)
-    K8s Ingress (triggers ALB creation)
-```
-
-This uses the same CDK Lambda mechanism described above -- `cdk deploy` invokes a Lambda
-with kubectl to apply K8s manifests. The end result is identical to "this setup" (same pods,
-same ALB, same traffic flow). The difference is purely operational: CDK's Lambda applies the
-manifests vs you running kubectl yourself.
-
-You could still use kubectl with this approach (the cluster exists and accepts commands),
-but you'd have two sources of truth -- CDK's Lambda and your kubectl -- fighting over the
-same K8s resources. That's one reason it's messy.
-
-Problems with this approach:
-- Every app change (new image tag, env var tweak) requires a full `cdk deploy` (~16 min)
-- K8s manifests are embedded in TypeScript, not standard YAML (harder to debug, can't use `kubectl apply` directly)
-- The hidden Lambda adds complexity and failure modes (the `ROLLBACK_FAILED` error you hit was partly due to this machinery)
-- Can't use Helm charts, ArgoCD, or other standard K8s tooling for app deployment
-
-
-### Summary
-
-| | ECS | This EKS setup | Old EKS (workload.ts) |
-|---|---|---|---|
-| Infra deployment | `cdk deploy` | `cdk deploy` | `cdk deploy` |
-| App deployment | `cdk deploy` | `kubectl apply` | `cdk deploy` |
-| ALB created by | CDK directly | LB Controller (triggered by Ingress) | LB Controller (triggered by CDK's hidden Lambda) |
-| DNS created by | CDK directly | ExternalDNS (triggered by Ingress) | Manual |
-| Worker nodes | None (Fargate) | Managed EC2 node group | Managed EC2 node group |
-| App manifests | TypeScript (CDK) | Standard K8s YAML | TypeScript (CDK) |
-| Deploy time for app changes | ~5 min | ~30 seconds | ~16 min |
-| K8s ecosystem tools | N/A | Helm, ArgoCD, etc. | Limited |
