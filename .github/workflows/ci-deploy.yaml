@@ -151,7 +151,7 @@ jobs:
           cd "${{ inputs.cdk_app_dir }}"
           chmod +x ./lib/constructs/platform/eks/script/deploy-manifests/deploy-manifests.sh
           ./lib/constructs/platform/eks/script/deploy-manifests/deploy-manifests.sh \
-            --stack-name "${{ needs.resolve_targets.outputs.service_name }}-k8s-dev" \
+            --stackName "${{ needs.resolve_targets.outputs.service_name }}-k8s-dev" \
             --apply
 
   # --- Test System Local instance - local code, real AWS deps (S3 etc) ---
@@ -257,5 +257,5 @@ jobs:
           cd "${{ inputs.cdk_app_dir }}"
           chmod +x ./lib/constructs/platform/eks/script/deploy-manifests/deploy-manifests.sh
           ./lib/constructs/platform/eks/script/deploy-manifests/deploy-manifests.sh \
-            --stack-name "${{ needs.resolve_targets.outputs.service_name }}-k8s-release" \
+            --stackName "${{ needs.resolve_targets.outputs.service_name }}-k8s-release" \
             --apply
