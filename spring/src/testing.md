@@ -2,7 +2,6 @@
 
 For test commands, tiers, and FakeAws usage, see [spring](../spring.md#test-tiers). This document covers the design rationale behind the test structure.
 
----
 
 ## Design Principle: Environment Isolation
 

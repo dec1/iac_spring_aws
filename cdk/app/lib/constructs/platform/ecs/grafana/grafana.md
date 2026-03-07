@@ -30,7 +30,7 @@ Grafana Cloud does not connect to your AWS account. The data flow is one-directi
 
 ---
 
-## Setup (From Scratch)
+## Setup
 
 
 ### 1. Create a Grafana Cloud Account

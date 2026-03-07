@@ -12,19 +12,23 @@ By default, your Kubernetes
 
 Install these locally if you don't have them already:
 
-- **AWS CLI v2**: https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html
-    - make sure your local aws credentials are valid (refreshed)
-- **kubectl**: https://kubernetes.io/docs/tasks/tools/install-kubectl-windows/ (or via `choco install kubernetes-cli` on Windows)
-- **Verify versions**:
-
+- [AWS CLI v2](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
+    - make sure your local aws credentials are valid (refreshed), eg via `aws sso login --profile <profile>`
+     
   - `aws --version`
     - `aws-cli/2.33.25 Python/3.13.11 Windows/11 exe/AMD64`
 
-- `kubectl version`
 
+#####    
+- [kubectl](https://kubernetes.io/docs/tasks/tools/) 
+
+    - `kubectl version`
+
+        ~~~
         Client Version: v1.35.0
         Kustomize Version: v5.7.1
         Server Version: v1.35.0-eks-3a10415
+        ~~~
         
 
 
