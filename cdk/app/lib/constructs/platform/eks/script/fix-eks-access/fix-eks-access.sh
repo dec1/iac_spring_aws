@@ -2,6 +2,7 @@
 set -euo pipefail
 
 # .SYNOPSIS
+#     Ensure your local AWS credentials allow you kubectl access to the Kubernetes cluster.
 #     Fixes EKS "provide credentials" errors by granting your local IAM identity admin access.
 #
 # .DESCRIPTION

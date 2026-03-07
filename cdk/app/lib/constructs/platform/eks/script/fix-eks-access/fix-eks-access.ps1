@@ -1,5 +1,6 @@
 <#
 .SYNOPSIS
+    Ensure your local AWS credentials allow you kubectl access to the Kubernetes cluster.
     Fixes EKS "provide credentials" errors by granting your local IAM identity admin access.
 
 .DESCRIPTION
@@ -13,7 +14,7 @@
     to propagate, and registers your current IAM identity as a Cluster Admin.
 
 .EXAMPLE
-    .\fix-eks-access.ps1 -StackName my-backend-k8s-release -Region eu-west-2 -Profile myb
+    .\fix-eks-access.ps1 -StackName <serviceName>-k8s-<dev|release> [-Region <region>] -Profile <profileName>
 #>#>
 
 param(
