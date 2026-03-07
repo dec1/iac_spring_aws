@@ -42,7 +42,6 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
-          # Removed 'cache: gradle' here to let setup-gradle handle it
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -61,14 +60,13 @@ jobs:
         if: matrix.build-mode == 'manual'
         working-directory: spring
         run: |
-          export GRADLE_OPTS="-Xmx4g"
-
           # heartbeat so CI logs show activity during long Kotlin compile
           ( while true; do echo "[heartbeat] Kotlin compilation still running..."; sleep 60; done ) &
           HEARTBEAT_PID=$!
 
-          # Added --build-cache to utilize the setup-gradle cache
+          # Added -Dorg.gradle.jvmargs to allocate 4GB to the build process
           ./gradlew clean classes testClasses \
+            -Dorg.gradle.jvmargs="-Xmx4g" \
             --no-daemon \
             --build-cache \
             --console=plain \
