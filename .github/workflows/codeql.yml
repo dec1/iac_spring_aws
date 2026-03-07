@@ -5,7 +5,7 @@
 # clearly distinguishable from the main CI/CD pipeline.
 
 name: "Security Scan (CodeQL)"
-run-name: "CodeQL security scan for ${{ github.ref_name }}"
+run-name: "CodeQL security scan (for ${{ github.ref_name }})"
 
 on:
   push:
@@ -56,7 +56,7 @@ jobs:
         working-directory: spring
         run: |
           export GRADLE_OPTS="-Xmx4g"
-          ./gradlew clean classes testClasses --no-daemon
+          ./gradlew clean classes testClasses --no-daemon --console=plain --stacktrace --info
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4
