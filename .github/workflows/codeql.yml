@@ -56,9 +56,20 @@ jobs:
         working-directory: spring
         run: |
           export GRADLE_OPTS="-Xmx4g"
-          ./gradlew clean classes testClasses --no-daemon --console=plain --stacktrace --info
 
-      - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v4
-        with:
-          category: "/language:${{ matrix.language }}"
+          # heartbeat so CI logs show activity during long Kotlin compile
+          ( while true; do echo "[heartbeat] Kotlin compilation still running..."; sleep 60; done ) &
+          HEARTBEAT_PID=$!
+
+          ./gradlew clean classes testClasses \
+            --no-daemon \
+            --console=plain \
+            --stacktrace \
+            --info \
+            -Dkotlin.compiler.execution.strategy=in-process
+
+          kill $HEARTBEAT_PID || true
+            - name: Perform CodeQL Analysis
+              uses: github/codeql-action/analyze@v4
+              with:
+                category: "/language:${{ matrix.language }}"
