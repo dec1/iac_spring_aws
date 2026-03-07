@@ -1,6 +1,6 @@
 # CI/CD Pipelines and Runners
 
-CI/CD runs on self-hosted runners deployed as EC2 instances inside AWS. Both GitLab (`.gitlab-ci.yml`) and GitHub (`.github/workflows/ci.yaml`) pipelines follow the same stages and produce the same result. The pipelines handle both ECS and EKS deployments, driven by the environment blocks in `config.yaml`.
+CI/CD runs on self-hosted runners deployed as EC2 instances inside AWS. Both [GitLab](../../../.gitlab-ci.yml)  and [GitHub](../../../.github/workflows/ci.yaml) pipelines follow the same stages and produce the same result. The pipelines handle both ECS and EKS deployments, driven by the environment blocks in [config.yaml](../../config.yaml).
 
 Both runner types use an IAM instance role -- no long-lived AWS access keys in CI.
 

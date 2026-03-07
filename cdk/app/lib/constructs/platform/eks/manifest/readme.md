@@ -14,34 +14,14 @@ Several values in the K8s manifests (certificate ARNs, WAF ARNs, S3 bucket names
 
 ```
 manifest/
-  template/         checked into git -- contains __PLACEHOLDER__ tokens, no real values
-  generated/        gitignored -- created by the script with resolved values
-scripts/            the deploy scripts (ps1 for Windows, sh for Linux)
+  template/         # checked into git -- contains __PLACEHOLDER__ tokens, no real values
+  generated/        # gitignored -- created by the script with resolved values
+script/             # utility scripts (.ps1 for Windows, .sh for Linux) - including those for manifest (un)deployment - more details below
+
 ```
 
 Add `manifest/generated/` to `.gitignore`.
 
-
-## Assumptions
-
-- **AWS CLI v2** and **kubectl** are installed and on PATH.
-- **AWS credentials are active.** The script queries CloudFormation, so your credentials must be valid. If using SSO profiles locally, run `aws sso login --profile <name>` first. CI runners using IAM roles don't need this.
-- The EKS app stack has already been deployed via `cdk deploy` (the script reads its CloudFormation outputs).
-- The identity stack (Cognito) has already been deployed (the script reads `IssuerUriOutput` from it).
-- `config_common.yaml` exists at the repo root and contains `serviceName`, `imageRepositoryName`, `appVersion`.
-- `config.yaml` exists at `<repo>/cdk/config.yaml` and contains `appPortNum` and `_defaults.healthCheckPath`.
-- The app stack name ends with `-dev` or `-release` (used to derive the staging environment).
-- Can be run from any directory -- paths are resolved relative to the script location.
-
-
-## Defaults
-
-| Parameter | Default | Override |
-|---|---|---|
-| Identity stack name | `my-backend-identity` | `-IdentityStackName` / `--identity-stack` |
-| AWS profile | none (uses ambient credentials) | `-Profile` / `--profile` |
-| Repo root | 8 levels up from the script | `-RepoRoot` / `--repo-root` |
-| Apply after generating | no | `-Apply` / `--apply` |
 
 
 ## Deploy Manifests
@@ -69,42 +49,23 @@ Add `manifest/generated/` to `.gitignore`.
     ```
 
 
-## What the script does
+    #### What the script does
 
-1. Reads `config_common.yaml` for service name, image repo, and app version
-2. Reads `config.yaml` for app port and health check path
-3. Queries the app stack (`-StackName`) for: certificate ARN, WAF ARN, hostname, S3 bucket name
-4. Derives region, account ID, and staging environment from those outputs
-5. Queries the identity stack for the Cognito Issuer URI
-6. Builds the ECR image URI: `<account>.dkr.ecr.<region>.amazonaws.com/<repo>:<version>`
-7. Replaces all `__PLACEHOLDER__` tokens in `template/*.yaml` and writes to `generated/`
-8. Warns if any placeholders remain unresolved
-9. With `-Apply`: configures kubectl (`aws eks update-kubeconfig`) and runs `kubectl apply -f generated/`
-
-
-## Placeholders
-
-| Token | Source |
-|---|---|
-| `__SERVICE_NAME__` | `config_common.yaml: serviceName` |
-| `__ECR_IMAGE_URI__` | Built from account + region + `config_common.yaml` (imageRepositoryName, appVersion) |
-| `__AWS_REGION__` | Derived from app stack outputs |
-| `__STAGING_ENVIRONMENT__` | Derived from stack name suffix (-dev / -release) |
-| `__APP_PORT__` | `config.yaml: appPortNum` |
-| `__HEALTH_CHECK_PATH__` | `config.yaml: _defaults.healthCheckPath` (falls back to `/actuator/health`) |
-| `__ISSUER_URI__` | Identity stack output `IssuerUriOutput` |
-| `__S3_BUCKET_NAME__` | App stack output `S3BucketName` |
-| `__EKS_CERTIFICATE_ARN__` | App stack output `EksCertificateArn` |
-| `__EKS_WEB_ACL_ARN__` | App stack output `EksWebAclArn` |
-| `__EKS_HOSTNAME__` | App stack output `EksHostname` |
+    1. Reads `config_common.yaml` for service name, image repo, and app version
+    2. Reads `config.yaml` for app port and health check path
+    3. Queries the app stack (`-StackName`) for: certificate ARN, WAF ARN, hostname, S3 bucket name
+    4. Derives region, account ID, and staging environment from those outputs
+    5. Queries the identity stack for the Cognito Issuer URI
+    6. Builds the ECR image URI: `<account>.dkr.ecr.<region>.amazonaws.com/<repo>:<version>`
+    7. Replaces all `__PLACEHOLDER__` tokens in `template/*.yaml` and writes to `generated/`
+    8. Warns if any placeholders remain unresolved
+    9. With `-Apply`: configures kubectl (`aws eks update-kubeconfig`) and runs `kubectl apply -f generated/`
 
 
-## What stays hardcoded (and why)
-
-Resource limits (`cpu: 500m`, `memory: 1024Mi`) and probe timing (`initialDelaySeconds`, `periodSeconds`, etc.) are left as literal values in the templates. These are K8s-specific tuning knobs that don't exist in `config.yaml` and rarely change. Edit them directly in the template files if needed.
 
 
-# Cleanup
+
+## Cleanup
 
 Unlike with ECS, where you can just call `cdk destroy` directly, with Kubernetes you have to be careful to first clear up any resources it has caused the provisioning of  (directly or indirectly because of the loadbalancer provisioned through 
 
@@ -174,10 +135,10 @@ Typically used with `--profile`  on a local developer's machine, and without in 
 
 ```bash
 
-./deploy-manifests.sh --stack-name <serviceName>-k8s-<dev|release> [--profile myb] --apply
+./deploy-manifests.sh --stackName <serviceName>-k8s-<dev|release> [--profile myb] --apply
 
 # Resolve only
-./deploy-manifests.sh --stack-name <serviceName>-k8s-<dev|release> [--profile myb] 
+./deploy-manifests.sh --stackName <serviceName>-k8s-<dev|release> [--profile myb] 
 ```
 
 
