@@ -68,11 +68,10 @@ jobs:
           # CodeQL process tracing cannot monitor background daemons.
           # We force both Gradle (--no-daemon) and Kotlin (-Pkotlin.compiler.execution.strategy=in-process) 
           # to compile in the current visible process, and allocate 4GB RAM to handle the load.
-
           ./gradlew clean classes testClasses \
             -Dorg.gradle.jvmargs="-Xmx4g" \
             --no-daemon \
-            --build-cache \
+            --no-build-cache \
             --console=plain \
             --stacktrace \
             --info \
