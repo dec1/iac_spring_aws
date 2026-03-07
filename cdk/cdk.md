@@ -149,7 +149,7 @@ powershell -File .\code_deploy\trigger_blue_green.ps1 -AwsProfile <aws-profile>
 ~~~
 
 For EKS stacks, apply K8s manifests after `cdk deploy`:
-- see [deploy manifests](manifest/readme.md)
+- see [deploy manifests](app/lib/constructs/platform/eks/manifest/readme.md)
 
 After these stacks are deployed, CI handles all dev/release updates automatically.
 

@@ -2,7 +2,7 @@
 ## Known Issues and Workarounds
 
 - #### Can't access Kubernetes Cluster
-    The kubernetes cluster was created successfully but you cant access it eg via `kubectl` - see [EKS Guide](app/lib/constructs/platform/eks/eks.md)
+    The kubernetes cluster was created successfully but you cant access it eg via `kubectl` - see [EKS Guide](cdk/app/lib/constructs/platform/eks/eks.md) 
 
 - #### ACM certificate stuck in pending
 
