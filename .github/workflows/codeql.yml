@@ -66,7 +66,7 @@ jobs:
             --console=plain \
             --stacktrace \
             --info \
-            -Dkotlin.compiler.execution.strategy=in-process
+            -Dkotlin.daemon.enabled=false
 
           kill $HEARTBEAT_PID || true
             - name: Perform CodeQL Analysis
