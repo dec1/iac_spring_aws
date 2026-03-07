@@ -455,4 +455,72 @@ new route53.ARecord(this, 'OldApiRecord', {
 });
 ```
 
--
+### Stale `Vpc.fromLookup()` context -
+
+`Vpc.fromLookup()` is called when deploying the **CI Runners** (they are being _installed_ into the the vpc of a dev-stack). The CDK uses a **context cache** to avoid repeatedly querying AWS during synth. The lookup result is stored in `cdk.context.json`. If the underlying infrastructure changes (for example the VPC was deleted, recreated, or you switch account/region), the cached value may become invalid.
+
+This can cause deployment failures such as:
+
+~~~
+The vpc ID 'vpc-xxxxxxxx' does not exist
+~~~
+
+because CDK is still synthesizing the stack using the *old cached VPC ID*.
+
+**Remedy**
+
+Clear the cached context so CDK performs the lookup again:
+
+~~~
+cdk context --clear
+~~~
+
+or remove the cache file directly:
+
+~~~
+rm cdk.context.json
+~~~
+
+Then re-run:
+
+~~~
+cdk synth
+cdk deploy
+~~~
+
+CDK will re-query AWS for the VPC and regenerate the correct configuration.
+
+
+### Runner not appearing in GitHub or GitLab
+
+If the EC2 instance starts but the runner does not appear in the GitHub or GitLab UI, the bootstrap script likely failed during registration.
+
+Use **AWS Systems Manager → Session Manager → Connect** to access the instance and inspect the bootstrap log. All user-data output is redirected to:
+
+~~~
+sudo tail -n 200 /var/log/user-data.log
+~~~
+
+This log shows the exact step where runner installation or registration failed.
+
+Common issues include:
+
+- expired or invalid registration token
+- missing IAM permissions to read the token from Secrets Manager
+- no outbound internet access (GitHub/GitLab API unreachable)
+- runner registration failing during first boot
+
+Typical successful messages you should see:
+
+~~~
+Runner successfully added
+Listening for Jobs
+GitHub Actions Runner bootstrap completed
+~~~
+
+or for GitLab:
+
+~~~
+Registering runner... succeeded
+GitLab Runner bootstrap completed
+~~~
