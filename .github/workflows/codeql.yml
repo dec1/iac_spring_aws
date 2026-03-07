@@ -42,7 +42,13 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
-          cache: gradle
+          # Removed 'cache: gradle' here to let setup-gradle handle it
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          # Only master branch writes to the cache to prevent PRs from polluting it
+          cache-read-only: ${{ github.ref != 'refs/heads/master' }}
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
@@ -61,15 +67,18 @@ jobs:
           ( while true; do echo "[heartbeat] Kotlin compilation still running..."; sleep 60; done ) &
           HEARTBEAT_PID=$!
 
+          # Added --build-cache to utilize the setup-gradle cache
           ./gradlew clean classes testClasses \
             --no-daemon \
+            --build-cache \
             --console=plain \
             --stacktrace \
             --info \
-            -Dkotlin.daemon.enabled=false
+            -Pkotlin.compiler.execution.strategy=in-process
 
           kill $HEARTBEAT_PID || true
-            - name: Perform CodeQL Analysis
-              uses: github/codeql-action/analyze@v4
-              with:
-                category: "/language:${{ matrix.language }}"
+          
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:${{ matrix.language }}"
