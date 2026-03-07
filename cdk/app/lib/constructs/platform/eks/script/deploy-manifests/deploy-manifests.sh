@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# lib\constructs\platform\eks\manifest\scripts\deploy-manifests.sh
 set -euo pipefail
 
 # -------------------------------------------------------
@@ -49,7 +48,7 @@ ALB_WEBHOOK_MAX_ATTEMPTS="${ALB_WEBHOOK_MAX_ATTEMPTS:-60}"
 ALB_WEBHOOK_SLEEP_SECONDS="${ALB_WEBHOOK_SLEEP_SECONDS:-5}"
 
 usage() {
-    echo "Usage: $0 --stackName <stack-name> --profile <profile> [--region <region>] [--identity-stack <name>] [--repo-root <path>] [--kubectl-role-arn <arn>] [--apply]"
+    echo "Usage: $0 --stackName <stack-name> [--profile <profile>] [--region <region>] [--identity-stack <name>] [--repo-root <path>] [--kubectl-role-arn <arn>] [--apply]"
     exit 1
 }
 
@@ -67,7 +66,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-if [[ -z "$STACK_NAME" || -z "$PROFILE" ]]; then
+if [[ -z "$STACK_NAME"]]; then
     usage
 fi
 
