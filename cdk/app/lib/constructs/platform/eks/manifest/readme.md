@@ -14,9 +14,9 @@ Several values in the K8s manifests (certificate ARNs, WAF ARNs, S3 bucket names
 
 ```
 manifest/
-  template/       checked into git -- contains __PLACEHOLDER__ tokens, no real values
-  generated/      gitignored -- created by the script with resolved values
-  scripts/        the deploy scripts (ps1 for Windows, sh for Linux)
+  template/         checked into git -- contains __PLACEHOLDER__ tokens, no real values
+  generated/        gitignored -- created by the script with resolved values
+scripts/            the deploy scripts (ps1 for Windows, sh for Linux)
 ```
 
 Add `manifest/generated/` to `.gitignore`.
@@ -44,29 +44,29 @@ Add `manifest/generated/` to `.gitignore`.
 | Apply after generating | no | `-Apply` / `--apply` |
 
 
-## Usage
+## Deploy Manifests
 
-### PowerShell (Windows / local)
+- ##### PowerShell (Windows / local)
 
-Typically used with `--profile`  on a local developer's machine, and without in CI (runner's IAM role, used instead)
+    Typically used with `--profile`  on a local developer's machine, and without in CI (runner's IAM role, used instead)
 
-```powershell
+    ```powershell
 
-.\deploy-manifests.ps1 -StackName <serviceName>-k8s-<dev|release> -Profile myb -Apply
+    .\deploy-manifests.ps1 -StackName <serviceName>-k8s-<dev|release> -Profile myb -Apply
 
-# Resolve only (inspect generated/ before applying)
-.\deploy-manifests.ps1 -StackName <serviceName>-k8s-<dev|release>  -Profile myb
-```
+    # Resolve only (inspect generated/ before applying)
+    .\deploy-manifests.ps1 -StackName <serviceName>-k8s-<dev|release>  -Profile myb
+    ```
 
-### Bash (Linux / CI runners)
+- ##### Bash (Linux / CI runners)
 
-```bash
+    ```bash
 
-./deploy-manifests.sh --stack-name <serviceName>-k8s-<dev|release> [--profile myb] --apply
+    ./deploy-manifests.sh --stack-name <serviceName>-k8s-<dev|release> [--profile myb] --apply
 
-# Resolve only
-./deploy-manifests.sh --stack-name <serviceName>-k8s-<dev|release> [--profile myb] 
-```
+    # Resolve only
+    ./deploy-manifests.sh --stack-name <serviceName>-k8s-<dev|release> [--profile myb] 
+    ```
 
 
 ## What the script does
@@ -105,6 +105,81 @@ Resource limits (`cpu: 500m`, `memory: 1024Mi`) and probe timing (`initialDelayS
 
 
 # Cleanup
+
+Unlike with ECS, where you can just call `cdk destroy` directly, with Kubernetes you have to be careful to first clear up any resources it has caused the provisioning of  (directly or indirectly because of the loadbalancer provisioned through 
+
+
+- ##### PowerShell (Windows / local)
+
+    Typically used with `--profile`  on a local developer's machine, and without in CI (runner's IAM role, used instead)
+
+    ```powershell
+    
+    # Ensure you have Kubernetes admin access - needed only if you deployed eks without passing your _eksAdminRoleArn_  (see config.yaml), somebody else deployed originally (passing their _eksAdminRoleArn_)
+    .\fix-eks-access.ps1 -StackName <serviceName>-k8s-<dev|release> [-Region <region>] -Profile <profileName>`
+
+    # undo manifest deployment
+    .\cleanup.ps1 -StackName <serviceName>-k8s-<dev|release> -Profile <profileName>`
+
+    # undo cdk deployment
+    cdk destroy <serviceName>-k8s-<dev|release> --profile <profileName>
+    ```
+
+- ##### Bash (Linux / CI runners)
+
+    ```bash
+
+    # Ensure you have Kubernetes admin access - needed only if you deployed eks without passing your _eksAdminRoleArn_  (see config.yaml), somebody else deployed originally (passing their _eksAdminRoleArn_)
+    ./fix-eks-access.sh --stackName <serviceName>-k8s-<dev|release> --profile <profileName>`
+
+    # undo manifest deployment
+    ./cleanup.sh --stack-name <serviceName>-k8s-<dev|release> --profile <profileName>`
+
+    # undo cdk deployment
+    cdk destroy <serviceName>-k8s-<dev|release> --profile <profileName>
+    ```
+
+
+
+
+-  1). Needed only if you deployed eks without passing your _eksAdminRoleArn_  (see config.yaml), somebody else deployed originally (passing their _eksAdminRoleArn_)
+    - `app> .\lib\constructs\platform\eks\script\fix-eks-access\` `fix-eks-access.ps1 -StackName <stackName> [-Region <region>] -Profile <profileName>`
+        - eg `app> .\lib\constructs\platform\eks\script\fix-eks-access\` `fix-eks-access.ps1 -StackName my-backend-k8s-dev -Profile myb`)
+
+
+- 2). Delete K8s resources first (this deletes the Ingress-created ALB + DNS record) - delegates to `kubectl delete` 
+    - `app> .\lib\constructs\platform\eks\script\` `cleanup-manifests.ps1 -StackName <stackName> -Profile <profileName>`
+         - `eg app> .\lib\constructs\platform\eks\script\` `cleanup-manifests.ps1 -StackName my-backend-k8s-dev -Profile myb`
+
+-  3. Destroy the CDK stack
+    - `cdk destroy <stackName> --profile <profileName>`
+       - eg `cdk destroy my-backend-k8s-dev --profile myb`
+```
+
+---
+
+### PowerShell (Windows / local)
+
+Typically used with `--profile`  on a local developer's machine, and without in CI (runner's IAM role, used instead)
+
+```powershell
+
+.\deploy-manifests.ps1 -StackName <serviceName>-k8s-<dev|release> -Profile myb -Apply
+
+# Resolve only (inspect generated/ before applying)
+.\deploy-manifests.ps1 -StackName <serviceName>-k8s-<dev|release>  -Profile myb
+```
+
+### Bash (Linux / CI runners)
+
+```bash
+
+./deploy-manifests.sh --stack-name <serviceName>-k8s-<dev|release> [--profile myb] --apply
+
+# Resolve only
+./deploy-manifests.sh --stack-name <serviceName>-k8s-<dev|release> [--profile myb] 
+```
+
 
 The scripts in `cleanup/` are required because some AWS resources (notably the ALB, target groups, and related SG rules)
 are created indirectly by the AWS Load Balancer Controller when you `kubectl apply` an Ingress.

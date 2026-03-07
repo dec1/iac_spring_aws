@@ -20,7 +20,7 @@ To use a custom domain, you will need a _Route 53_ hosted _zone_ for your custom
 
 
 
-### First-Time Deployment Order
+### Dependency Order
 
 Some resources must exist before others can reference them:
 

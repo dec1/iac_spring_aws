@@ -56,6 +56,7 @@ The rest of this document covers the one-time setup that makes that workflow pos
 | [manifest](cdk/app/lib/constructs/platform/eks/manifest/README.md) | K8s manifest templates, deploy-manifests script usage |
 | [idp](cdk/app/idp/idp.md)  | Cognito identity provider setup, client scopes, credential retrieval scripts |
 | [ci](cdk/app/ci/ci.md) | CI/CD pipeline stages, runner infrastructure, secrets, GitLab vs GitHub differences |
+| [issues](issues.md) | Known issues and workarounds |
 
 
 ---
