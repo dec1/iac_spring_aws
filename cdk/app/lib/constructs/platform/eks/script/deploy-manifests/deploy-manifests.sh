@@ -66,7 +66,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-if [[ -z "$STACK_NAME"]]; then
+if [[ -z "$STACK_NAME" ]]; then
     usage
 fi
 
