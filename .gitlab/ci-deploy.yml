@@ -209,8 +209,8 @@ deploy_eks_dev:
     - *install_kubectl
 
     # 3. Resolve manifest placeholders and apply
-    - chmod +x ./lib/constructs/platform/eks/manifest/scripts/deploy-manifests.sh
-    - ./lib/constructs/platform/eks/manifest/scripts/deploy-manifests.sh --stack-name "${CDK_SERVICE_NAME}-k8s-dev" --apply
+    - chmod +x ./lib/constructs/platform/eks/script/deploy-manifests/deploy-manifests.sh
+    - ./lib/constructs/platform/eks/script/deploy-manifests/deploy-manifests.sh --stack-name "${CDK_SERVICE_NAME}-k8s-dev" --apply
   only:
     - dev
     - master
@@ -296,7 +296,7 @@ promote_eks_to_release:
 
     - *install_kubectl
 
-    - chmod +x ./lib/constructs/platform/eks/manifest/scripts/deploy-manifests.sh
-    - ./lib/constructs/platform/eks/manifest/scripts/deploy-manifests.sh --stack-name "${CDK_SERVICE_NAME}-k8s-release" --apply
+    - chmod +x ./lib/constructs/platform/eks/script/deploy-manifests/deploy-manifests.sh
+    - ./lib/constructs/platform/eks/script/deploy-manifests/deploy-manifests.sh --stack-name "${CDK_SERVICE_NAME}-k8s-release" --apply
   only:
     - master
