@@ -1,9 +1,5 @@
 # ingress.yaml
 #
-# This is the K8s equivalent of your LoadBalancerConstruct + WAF association.
-# When the AWS Load Balancer Controller sees this Ingress, it creates a real ALB
-# in your public subnets, with the cert and WAF you specify in the annotations.
-#
 # All __PLACEHOLDER__ tokens are resolved by the deploy-manifests script.
 # Check ALB creation: kubectl get ingress <service-name>-ingress
 #   (the ADDRESS column shows the ALB DNS name once it is ready, takes ~2-3 min)
@@ -17,36 +13,39 @@ kind: Ingress
 metadata:
   name: __SERVICE_NAME__-ingress
   annotations:
-    # --- These annotations are read by the AWS Load Balancer Controller ---
 
-    # Internet-facing ALB in public subnets (same as your LoadBalancerConstruct)
+    # Internet-facing ALB in public subnets
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
 
-    # HTTPS listener on port 443, using your ACM certificate
+    # HTTPS listener on port 443
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS": 443}]'
 
-    # ACM certificate and WAF -- injected by deploy-manifests script
+    # ACM certificate and WAF
     alb.ingress.kubernetes.io/certificate-arn: "__EKS_CERTIFICATE_ARN__"
     alb.ingress.kubernetes.io/wafv2-acl-arn: "__EKS_WEB_ACL_ARN__"
 
-    # SSL policy (same TLS settings as your HTTPS listener)
+    # TLS policy
     alb.ingress.kubernetes.io/ssl-policy: ELBSecurityPolicy-TLS13-1-2-2021-06
 
-    # Health check configuration (matches your target group health check)
+    # Health check configuration
     alb.ingress.kubernetes.io/healthcheck-path: __HEALTH_CHECK_PATH__
     alb.ingress.kubernetes.io/healthcheck-interval-seconds: "15"
     alb.ingress.kubernetes.io/healthcheck-timeout-seconds: "5"
     alb.ingress.kubernetes.io/healthy-threshold-count: "2"
 
-    # Tags on the created ALB (same tags your CDK adds)
-    alb.ingress.kubernetes.io/tags: MyService=__SERVICE_NAME__,MyStagingEnvironment=__STAGING_ENVIRONMENT__,MyComputePlatform=kubernetes
+    # Tags on the created ALB (same tags your CDK adds, and a couple more)
+    alb.ingress.kubernetes.io/tags: >
+      MyService=__SERVICE_NAME__,
+      MyStagingEnvironment=__STAGING_ENVIRONMENT__,
+      MyComputePlatform=kubernetes,
+      ManagedBy=eks-ingress,
+      Stack=__SERVICE_NAME__-k8s-__STAGING_ENVIRONMENT__
 
-    # --- ExternalDNS: automatically create/delete Route53 record for this hostname ---
+    # ExternalDNS
     external-dns.alpha.kubernetes.io/hostname: __EKS_HOSTNAME__
 
 spec:
-  # Use ALB ingress class (replaces deprecated kubernetes.io/ingress.class annotation)
   ingressClassName: alb
   rules:
     - host: __EKS_HOSTNAME__
@@ -56,6 +55,6 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: __SERVICE_NAME__   # Must match service.yaml metadata.name
+                name: __SERVICE_NAME__
                 port:
-                  number: 80             # Must match service.yaml spec.ports[].port
+                  number: 80
