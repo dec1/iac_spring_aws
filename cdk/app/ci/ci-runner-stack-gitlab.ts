@@ -21,13 +21,22 @@ export class GitlabRunnerStack extends CiRunnerStackBase {
       // Runner user
       'id -u gitlab-runner >/dev/null 2>&1 || useradd --comment "GitLab Runner" --create-home gitlab-runner --shell /bin/bash',
 
-      // Fetch token from Secrets Manager (runtime)
-      `TOKEN="$(aws secretsmanager get-secret-value --secret-id ${props.secretName} --region ${this.region} --query SecretString --output text)"`,
-      'if [ -z "$TOKEN" ]; then echo "ERROR: Runner token is empty (Secrets Manager fetch failed)"; exit 1; fi',
-
       // Install + start service (safe to re-run)
       'gitlab-runner install --user=gitlab-runner --working-directory=/home/gitlab-runner || true',
       'gitlab-runner start || true',
+
+      // Utility: mask a token for safe logging -- shows first 3 and last 3 characters,
+      // replaces everything in between with lowercase "x".
+      'mask_token() {',
+      '  local t="$1"',
+      '  local len=${#t}',
+      '  if [ "$len" -le 6 ]; then',
+      '    printf "%s" "$(printf "x%.0s" $(seq 1 "$len"))"',
+      '  else',
+      '    local mid=$((len - 6))',
+      '    printf "%s%s%s" "${t:0:3}" "$(printf "x%.0s" $(seq 1 "$mid"))" "${t: -3}"',
+      '  fi',
+      '}',
 
       // Register runner only once (avoid duplicate runners after reboot)
       //
@@ -46,11 +55,25 @@ export class GitlabRunnerStack extends CiRunnerStackBase {
       'else',
       '  echo "Registering GitLab Runner (first boot or config missing)..."',
 
-      // Safety: detect new-workflow tokens and clarify behavior.
-      'if echo "$TOKEN" | grep -q "^glrt-"; then echo "Using glrt-* runner auth token (new workflow). Runner tags must be configured in GitLab UI."; fi',
+      // Retry loop: keeps trying registration every 60s until it succeeds.
+      // This allows the operator to update the secret in Secrets Manager externally
+      // (e.g. rotate the glrt-* token in the GitLab UI) without having to reboot the instance.
+      '  while true; do',
 
-      '  for i in 1 2 3 4 5; do',
-      `    gitlab-runner register --non-interactive \\`,
+      // Fetch token from Secrets Manager (runtime) -- re-fetched each iteration so that
+      // an externally updated secret is picked up without a reboot.
+      `    TOKEN="$(aws secretsmanager get-secret-value --secret-id ${props.secretName} --region ${this.region} --query SecretString --output text)"`,
+      '    if [ -z "$TOKEN" ]; then',
+      '      echo "WARNING: Runner token is empty (Secrets Manager fetch failed). Retrying in 60s..."',
+      '      sleep 60',
+      '      continue',
+      '    fi',
+      '    echo "Fetched token: $(mask_token "$TOKEN")"',
+
+      // Safety: detect new-workflow tokens and clarify behavior.
+      '    if echo "$TOKEN" | grep -q "^glrt-"; then echo "Using glrt-* runner auth token (new workflow). Runner tags must be configured in GitLab UI."; fi',
+
+      `    if gitlab-runner register --non-interactive \\`,
       `      --url "${props.gitlabUrl}" \\`,
       `      --token "$TOKEN" \\`,
       `      --executor "docker" \\`,
@@ -60,10 +83,17 @@ export class GitlabRunnerStack extends CiRunnerStackBase {
       `      --env "AWS_REGION=${this.region}" \\`,
       `      --env "AWS_DEFAULT_REGION=${this.region}" \\`,
       `      --env "AWS_ACCOUNT_ID=${this.account}" \\`,
-      `      --docker-volumes "/var/run/docker.sock:/var/run/docker.sock" && break || true`,
-      '    echo "Register attempt $i failed; sleeping 10s..."',
-      '    sleep 10',
+      `      --docker-volumes "/var/run/docker.sock:/var/run/docker.sock"; then`,
+      '      echo "Runner registration succeeded."',
+      '      break',
+      '    else',
+      '      echo "WARNING: gitlab-runner register failed. Retrying in 60s (update the secret in Secrets Manager if needed)..."',
+      '      sleep 60',
+      '      continue',
+      '    fi',
+      '',
       '  done',
+
       '  if [ ! -f /etc/gitlab-runner/config.toml ] || ! grep -q "^\\[\\[runners\\]\\]" /etc/gitlab-runner/config.toml; then',
       '    echo "ERROR: registration did not create a runner entry in config.toml";',
       '    exit 1;',

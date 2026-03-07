@@ -58,52 +58,97 @@ export class GithubRunnerStack extends CiRunnerStackBase {
       'tar xzf actions-runner-linux-x64.tar.gz',
       'chown -R actions:actions /opt/actions-runner',
 
+      // Utility: mask a token for safe logging -- shows first 3 and last 3 characters,
+      // replaces everything in between with lowercase "x".
+      'mask_token() {',
+      '  local t="$1"',
+      '  local len=${#t}',
+      '  if [ "$len" -le 6 ]; then',
+      '    printf "%s" "$(printf "x%.0s" $(seq 1 "$len"))"',
+      '  else',
+      '    local mid=$((len - 6))',
+      '    printf "%s%s%s" "${t:0:3}" "$(printf "x%.0s" $(seq 1 "$mid"))" "${t: -3}"',
+      '  fi',
+      '}',
+
+      // Register only once -- skip straight to service start if already configured.
+      'if [ -f /opt/actions-runner/.runner ]; then',
+      '  echo "GitHub Actions runner already configured. Skipping registration."',
+      'else',
+
+      // Retry loop: keeps trying registration every 60s until it succeeds.
+      // This allows the operator to update the secret in Secrets Manager externally
+      // (e.g. create a new PAT or registration token) without having to reboot the instance.
+      '  while true; do',
+
       // Fetch secret from Secrets Manager (runtime)
       //
       // This secret may contain either:
       // - a GitHub PAT / token that can call the registration-token API (recommended), OR
       // - a one-time runner registration token (expires quickly; use only for ad-hoc bootstrap).
-      `GITHUB_TOKEN="$(aws secretsmanager get-secret-value --secret-id ${props.secretName} --region ${this.region} --query SecretString --output text)"`,
-      'if [ -z "$GITHUB_TOKEN" ]; then echo "ERROR: GitHub token is empty (Secrets Manager fetch failed)"; exit 1; fi',
-
-      // Register only once
-      'if [ -f /opt/actions-runner/.runner ]; then',
-      '  echo "GitHub Actions runner already configured. Skipping registration."',
-      'else',
-      '  echo "Determining how to obtain a registration token..."',
-      '  IS_PAT="false"',
-      '  case "$GITHUB_TOKEN" in',
-      '    ghp_*|github_pat_*|gho_*|ghu_*|ghs_*|ghr_*) IS_PAT="true" ;;',
-      '  esac',
+      `    GITHUB_TOKEN="$(aws secretsmanager get-secret-value --secret-id ${props.secretName} --region ${this.region} --query SecretString --output text)"`,
+      '    if [ -z "$GITHUB_TOKEN" ]; then',
+      '      echo "WARNING: GitHub token is empty (Secrets Manager fetch failed). Retrying in 60s..."',
+      '      sleep 60',
+      '      continue',
+      '    fi',
+      '    echo "Fetched token: $(mask_token "$GITHUB_TOKEN")"',
       '',
 
-      '  REG_TOKEN=""',
-      '  if [ "$IS_PAT" = "true" ]; then',
-      '    echo "Secret looks like a GitHub token/PAT; requesting a registration token via API..."',
+      '    echo "Determining how to obtain a registration token..."',
+      '    IS_PAT="false"',
+      '    case "$GITHUB_TOKEN" in',
+      '      ghp_*|github_pat_*|gho_*|ghu_*|ghs_*|ghr_*) IS_PAT="true" ;;',
+      '    esac',
+      '',
+
+      '    REG_TOKEN=""',
+      '    REG_FAILED="false"',
+      '    if [ "$IS_PAT" = "true" ]; then',
+      '      echo "Secret looks like a GitHub token/PAT; requesting a registration token via API..."',
       // Capture HTTP status so we can fail with a clearer error if the token is invalid.
-      '    HTTP_CODE="$(curl -sS -o /tmp/gh_reg.json -w "%{http_code}" -X POST \\',
-      `      -H "Authorization: token $GITHUB_TOKEN" \\`,
-      '      -H "Accept: application/vnd.github+json" \\',
-      `      "${regTokenApi}")"`,
-      '    if [ "$HTTP_CODE" != "201" ]; then',
-      '      echo "ERROR: GitHub registration-token API call failed (HTTP $HTTP_CODE). Response:"',
-      '      cat /tmp/gh_reg.json || true',
-      '      exit 1',
+      '      HTTP_CODE="$(curl -sS -o /tmp/gh_reg.json -w "%{http_code}" -X POST \\',
+      `        -H "Authorization: token $GITHUB_TOKEN" \\`,
+      '        -H "Accept: application/vnd.github+json" \\',
+      `        "${regTokenApi}")"`,
+      '      if [ "$HTTP_CODE" != "201" ]; then',
+      '        echo "WARNING: GitHub registration-token API call failed (HTTP $HTTP_CODE). Response:"',
+      '        cat /tmp/gh_reg.json || true',
+      '        REG_FAILED="true"',
+      '      else',
+      '        REG_TOKEN="$(cat /tmp/gh_reg.json | sed -n \'s/.*"token"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/p\')"',
+      '        if [ -z "$REG_TOKEN" ]; then',
+      '          echo "WARNING: Could not parse registration token from API response."',
+      '          cat /tmp/gh_reg.json || true',
+      '          REG_FAILED="true"',
+      '        fi',
+      '      fi',
+      '    else',
+      '      echo "Secret does not look like a PAT; treating it as a runner registration token (must still be valid)."',
+      '      REG_TOKEN="$GITHUB_TOKEN"',
       '    fi',
-      '    REG_TOKEN="$(cat /tmp/gh_reg.json | sed -n \'s/.*"token"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/p\')"',
-      '    if [ -z "$REG_TOKEN" ]; then',
-      '      echo "ERROR: Could not parse registration token from API response."',
-      '      cat /tmp/gh_reg.json || true',
-      '      exit 1',
+      '',
+
+      // If token acquisition failed, wait and re-fetch from Secrets Manager.
+      '    if [ "$REG_FAILED" = "true" ]; then',
+      '      echo "Registration token acquisition failed. Retrying in 60s (update the secret in Secrets Manager if needed)..."',
+      '      sleep 60',
+      '      continue',
       '    fi',
-      '  else',
-      '    echo "Secret does not look like a PAT; treating it as a runner registration token (must still be valid)."',
-      '    REG_TOKEN="$GITHUB_TOKEN"',
-      '  fi',
       '',
 
       // Configure runner
-      `  su - actions -c 'cd /opt/actions-runner && ./config.sh --unattended --replace --url "https://github.com/${props.githubOrg}${props.githubScope === 'repo' ? `/${props.githubRepo}` : ''}" --token "'"$REG_TOKEN"'" --labels "${labelCsv}" --name "aws-ec2-${props.serviceName}"'`,
+      `    if su - actions -c 'cd /opt/actions-runner && ./config.sh --unattended --replace --url "https://github.com/${props.githubOrg}${props.githubScope === 'repo' ? `/${props.githubRepo}` : ''}" --token "'"$REG_TOKEN"'" --labels "${labelCsv}" --name "aws-ec2-${props.serviceName}"'; then`,
+      '      echo "Runner registration succeeded."',
+      '      break',
+      '    else',
+      '      echo "WARNING: config.sh failed. Retrying in 60s (update the secret in Secrets Manager if needed)..."',
+      '      sleep 60',
+      '      continue',
+      '    fi',
+      '',
+
+      '  done',
       'fi',
 
       // Install + start as a service
