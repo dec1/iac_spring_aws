@@ -138,7 +138,9 @@ export class GithubRunnerStack extends CiRunnerStackBase {
       '',
 
       // Configure runner
-      `    if su - actions -c 'cd /opt/actions-runner && ./config.sh --unattended --replace --url "https://github.com/${props.githubOrg}${props.githubScope === 'repo' ? `/${props.githubRepo}` : ''}" --token "'"$REG_TOKEN"'" --labels "${labelCsv}" --name "aws-ec2-${props.serviceName}"'; then`,
+      `    RUNNER_URL="https://github.com/${props.githubOrg}${props.githubScope === 'repo' ? `/${props.githubRepo}` : ''}"`,
+      '    echo "Registering runner against: $RUNNER_URL"',
+      `    if su - actions -c 'cd /opt/actions-runner && ./config.sh --unattended --replace --url "'"$RUNNER_URL"'" --token "'"$REG_TOKEN"'" --labels "${labelCsv}" --name "aws-ec2-${props.serviceName}"'; then`,
       '      echo "Runner registration succeeded."',
       '      break',
       '    else',

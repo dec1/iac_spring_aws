@@ -73,6 +73,7 @@ export class GitlabRunnerStack extends CiRunnerStackBase {
       // Safety: detect new-workflow tokens and clarify behavior.
       '    if echo "$TOKEN" | grep -q "^glrt-"; then echo "Using glrt-* runner auth token (new workflow). Runner tags must be configured in GitLab UI."; fi',
 
+      `    echo "Registering runner against: ${props.gitlabUrl}"`,
       `    if gitlab-runner register --non-interactive \\`,
       `      --url "${props.gitlabUrl}" \\`,
       `      --token "$TOKEN" \\`,
