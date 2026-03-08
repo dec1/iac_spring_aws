@@ -2,7 +2,41 @@
 ## Known Issues and Workarounds
 
 - #### Can't access Kubernetes Cluster
-    The kubernetes cluster was created successfully but you cant access it eg via `kubectl` - see [EKS Guide](cdk/app/lib/constructs/platform/eks/eks.md) 
+    The kubernetes cluster was created successfully but you cant access it eg via `kubectl` - see [Configure kubectl](cdk/app/lib/constructs/platform/eks/eks.md) and [Kubectl Access](cdk/app/lib/constructs/platform/eks/manifests.md)
+
+
+- #### CI Runner not appearing in GitHub or GitLab
+
+    If the EC2 instance starts but the runner does not appear in the GitHub or GitLab UI, the bootstrap script likely failed during registration (possibly a misconfigured access token).
+
+    Use *AWS Systems Manager → Session Manager → Connect* to access the instance and inspect the bootstrap log. All user-data output is redirected to:
+
+    `sudo tail --lines 200 --follow /var/log/user-data.log`
+
+
+    This log shows the exact step where runner installation or registration failed.
+
+    Common issues include:
+
+    - expired or invalid registration token
+    - missing IAM permissions to read the token from Secrets Manager
+    - no outbound internet access (GitHub/GitLab API unreachable)
+    - runner registration failing during first boot
+
+    Typical successful messages you should see:
+
+    ~~~
+    Runner successfully added
+    Listening for Jobs
+    GitHub Actions Runner bootstrap completed
+    ~~~
+
+    or for GitLab:
+
+    ~~~
+    Registering runner... succeeded
+    GitLab Runner bootstrap completed
+    ~~~
 
 - #### ACM certificate stuck in pending
 
@@ -47,43 +81,12 @@
     CDK will re-query AWS for the VPC and regenerate the correct configuration.
 
 
-- #### Ci Runner not appearing in GitHub or GitLab
 
-    If the EC2 instance starts but the runner does not appear in the GitHub or GitLab UI, the bootstrap script likely failed during registration.
-
-    Use *AWS Systems Manager → Session Manager → Connect* to access the instance and inspect the bootstrap log. All user-data output is redirected to:
-
-    `sudo tail --lines 200 --follow /var/log/user-data.log`
-
-
-    This log shows the exact step where runner installation or registration failed.
-
-    Common issues include:
-
-    - expired or invalid registration token
-    - missing IAM permissions to read the token from Secrets Manager
-    - no outbound internet access (GitHub/GitLab API unreachable)
-    - runner registration failing during first boot
-
-    Typical successful messages you should see:
-
-    ~~~
-    Runner successfully added
-    Listening for Jobs
-    GitHub Actions Runner bootstrap completed
-    ~~~
-
-    or for GitLab:
-
-    ~~~
-    Registering runner... succeeded
-    GitLab Runner bootstrap completed
-    ~~~
 
 
 - #### Proxy Support
-    - [spring](spring/local/proxy/readme.md) 
-    - [setup](setup.md)
+    - [Running behind proxy like zscaler, that modify certificates](spring/local/proxy/readme.md) 
+    - [Proxy (Zscaler or similar)](setup.md)
 
 - #### ALB redirects
 

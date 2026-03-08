@@ -1,8 +1,8 @@
 # EKS Getting Started Guide
 
 This guide covers what you need to know after your Kubernetes cluster is setup and running
-eg local `kubectl` setup, deploying your app, and useful AWS console views.
-
+eg local `kubectl` setup, deploying your app, and useful AWS console views. 
+Further details and useful scripts are described in [manifests](manifests.md).
 
 By default, your Kubernetes 
 **`<clusterName>`** is **`<serviceName>-k8s-dev|release`**
@@ -96,7 +96,7 @@ The LB Controller pods should show `Running` with `1/1` ready. If they're not th
 ## 4. Deploy your application
 
 
-See [deploy manifests](manifest/readme.md)
+See [deploy manifests](manifests.md)
 
 
 
@@ -124,7 +124,7 @@ This creates the Deployment, Service, Ingress, and HPA in one shot. Check progre
 Wait until the `ADDRESS` column shows an ALB hostname.
 
 - ####  Cleanup
-    If you no longer need your cluster, make sure [undo the manifest deployment](manifest/readme.md), before destroying the cdk stack.
+    If you no longer need your cluster, make sure undo the manifest deployment ([cleanup](manifests.md)) before destroying the cdk stack.
 
     Order matters: if you destroy the CDK stack first, the ALB created by the Ingress controller becomes orphaned (CDK doesn't know about it) and you'd have to delete it (and many other resources) manually in the EC2 console. 
 

@@ -1,19 +1,28 @@
 # .github/workflows/codeql.yml
 #
 # CodeQL security analysis workflow for Kotlin/Spring Gradle projects.
-# Uses manual build mode to avoid autobuild memory issues and keeps the run
+# Uses manual build mode to avoid auto-build memory issues and keeps the run
 # clearly distinguishable from the main CI/CD pipeline.
 
 name: "Security Scan (CodeQL)"
 run-name: "CodeQL security scan (for ${{ github.ref_name }})"
 
+
 on:
-  push:
-    branches: ["master"]
-  pull_request:
-    branches: ["master"]
-  schedule:
-    - cron: "28 6 * * 5"
+  # Security scan is currently manual to avoid unnecessary CI runs
+  # while the repository is idle. The analysis can still be triggered
+  # from the Actions UI when needed.
+  workflow_dispatch:
+
+  
+  # Re-enable automatic runs when active development resumes:
+  #
+  # push:
+  #   branches: ["master"]
+  # pull_request:
+  #   branches: ["master"]
+  # schedule:
+  #   - cron: "28 6 * * 5"
 
 jobs:
   analyze:

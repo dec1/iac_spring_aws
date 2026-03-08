@@ -30,7 +30,7 @@ Some resources must exist before others can reference them:
 4. **CI runner** -- deployed into the dev VPC (of whichever of ECS or EKS has been created); handles all subsequent deploys
 5. **Release environment(s)** -- ECS or EKS release stack (in its own VPC)
 6. **K8s manifests** (EKS only) -- after `cdk deploy` creates the EKS cluster, run `deploy-manifests.sh` (or `.ps1`) to apply the K8s workloads. 
-See [manifest](cdk/app/lib/constructs/platform/eks/manifest/readme.md).
+See [manifest](cdk/app/lib/constructs/platform/eks/manifests.md).
 
 After this one-time bootstrap, the CI pipeline owns all further deploys.
 

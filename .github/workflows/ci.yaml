@@ -5,10 +5,17 @@
 name: CI/CD Pipeline
 
 on:
-  push:
-    branches:
-      - dev
-      - master
+  # CI currently runs via manual trigger to avoid keeping paid AWS runners active
+  # while the project is idle. This repository is primarily a CI/CD showcase,
+  # so the pipeline can still be executed on demand from the Actions UI.
+  workflow_dispatch:
+
+  # Re-enable automatic runs when active development resumes:
+  # 
+  # push:
+  #   branches:
+  #     - dev
+  #     - master
 
 
 jobs:

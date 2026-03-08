@@ -53,7 +53,7 @@ Add `manifest/generated/` to `.gitignore`.
 
 EKS uses AWS IAM authentication for Kubernetes access.
 Creating the cluster does NOT automatically grant kubectl access to your local AWS identity.
-If you want kubectl access from your local machine, you need to set set this `eksAdminRoleArn` appropriately in  [config.yaml ](../../../../../../config.yaml), before the cluster is deployed. 
+If you want kubectl access from your local machine, you need to set set this `eksAdminRoleArn` appropriately in  [config.yaml ](../../../../../config.yaml), before the cluster is deployed. 
 If you have neglected to do so then this can be used to get you (kubectl) access to an already deployed cluster:
 
 

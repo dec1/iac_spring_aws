@@ -31,15 +31,14 @@ The documentation for this project is divided nto the following sections:
 
 | Document | Covers |
 |----------|--------|
-| *this file* | Project and documemtation overview, shared config, authentication, deployment architecture|
 | [Setup](setup.md) | General setup details and prerequisites |
 | [Spring](spring/spring.md) | Spring Boot app setup, profiles, API endpoints, test tiers, Jib image builds |
-| [Grafana (Observability)](cdk/app/lib/constructs/platform/ecs/grafana/grafana.md) | Observability: Grafana Cloud metrics sidecar setup, dashboards, costs |
+| [Observability and Grafana](cdk/app/lib/constructs/platform/ecs/grafana/grafana.md) | Observability and Grafana Cloud metrics sidecar setup, dashboards, costs |
 | [CDK](cdk/cdk.md)  | CDK stacks, config.yaml, AWS infrastructure (VPC, WAF, ECS/EKS, S3, IAM), first-time deploy commands |
 | [Testing Strategy](spring/src/testing.md) | Test architecture design rationale, environment isolation strategy, FakeAws concept |
 | [Manual Tests](spring/src/manualTest/manualTest.md) | End-to-end manual test setup and execution |
 | [Kubernetes](cdk/app/lib/constructs/platform/eks/eks.md) | EKS getting started, kubectl setup, manifest deployment, architecture comparison |
-| [Manifests & Kubectl](cdk/app/lib/constructs/platform/eks/manifest/readme.md) | K8s manifest templates, and cluster access via kubectl |
+| [Manifests & Kubectl](cdk/app/lib/constructs/platform/eks/manifests.md) | K8s manifest templates, custom scripts and cluster access via kubectl |
 | [Identity Management](cdk/app/idp/idp.md)  | Cognito identity provider setup, client scopes, credential retrieval scripts |
 | [CI/CD](cdk/app/ci/ci.md) | CI/CD pipeline stages, runner infrastructure, secrets, GitLab vs GitHub differences |
 | [Issues](issues.md) | Known issues and workarounds |
@@ -79,7 +78,7 @@ See [idp](cdk/app/idp/idp.md) for Cognito setup, client details, and credential 
 
 The AWS infrastructure is duplicated across independent _environments_: _**dev**_ and _**release**_. Each is a full, isolated copy of all cloud resources needed to run the app (dedicated VPC with ALB, WAF, ECS/EKS, etc.). In CDK/CloudFormation terms, Each environment is a set of (CDK/CloudFormation)  *stacks* -- a named, versioned bundle of AWS resources that can be deployed, updated, or torn down as a unit.
 
-Each environment can use either ECS/Fargate or EKS (Kubernetes) as its compute platform, configured per-environment in `config.yaml`. Its possible to create both both a ECS and an EKS version of a single environment (e.g. `dev` and  `k8s-dev`). If you do, each will have a dedicated VPC. However, its recommended to use either ECS or EKS, and not both simultaneously.   Both platforms use the same container image from ECR, the same Cognito auth, and the same WAF/ALB/DNS pattern.
+Each environment can use either ECS/Fargate or EKS (Kubernetes) as its compute platform, configured per-environment in [config.yaml](cdk/config.yaml). Its possible to create both both a ECS and an EKS version of a single environment (e.g. `dev` and  `k8s-dev`). If you do, each will have a dedicated VPC. However, its recommended to use either ECS or EKS, and not both simultaneously.   Both platforms use the same container image from ECR, the same Cognito auth, and the same WAF/ALB/DNS pattern.
 
 Dev is intentionally cheaper/smaller and serves as dedicated _experimental_ ground before changes (not just of the app but the infrastructure itself) are promoted to release.
 
