@@ -1,10 +1,12 @@
 # .github/workflows/ci-deploy.yaml
 #
-# Push image + deploy stacks. Requires AWS credentials (runner instance role).
-# Handles both ECS and EKS deployments, driven by config.yaml.
-# Called by ci.yaml.
+# Reusable workflow, called by ci.yaml.
 
-name: Deploy
+# Push container image + deploy stacks. Requires AWS credentials (runner instance role).
+# Handles both ECS and EKS deployments, driven by config.yaml.
+
+
+name: Reusable – (Deploy)
 
 on:
   workflow_call:

@@ -22,6 +22,28 @@ There is coverage of all the pillars you'd expect in any real backend (OAuth2/Co
 
 CDK was chosen over cross-vendor IaC alternatives like _Terraform_ or _Pulumi_ for two reasons: it's (effectively) stateless (there's no extra state file you have to maintain or store, so deployments can be triggered from anywhere with just the code), and it's AWS-native (always has first-class support for the latest AWS features). CDK manages all infrastructure: VPC, ALB, WAF, ECS or EKS, S3, IAM, DNS, and Cognito. For EKS stacks, CDK builds the platform (cluster, LB Controller, ExternalDNS) and a separate deploy-manifests script applies standard K8s YAML with values resolved from CloudFormation outputs.
 
+---
+
+
+## Documentation Layout
+
+The documentation for this project is divided nto the following sections:
+
+| Document | Covers |
+|----------|--------|
+| *this file* | Project and documemtation overview, shared config, authentication, deployment architecture|
+| [Setup](setup.md) | General setup details and prerequisites |
+| [Spring](spring/spring.md) | Spring Boot app setup, profiles, API endpoints, test tiers, Jib image builds |
+| [Grafana (Observability)](cdk/app/lib/constructs/platform/ecs/grafana/grafana.md) | Observability: Grafana Cloud metrics sidecar setup, dashboards, costs |
+| [CDK](cdk/cdk.md)  | CDK stacks, config.yaml, AWS infrastructure (VPC, WAF, ECS/EKS, S3, IAM), first-time deploy commands |
+| [Testing Strategy](spring/src/testing.md) | Test architecture design rationale, environment isolation strategy, FakeAws concept |
+| [Manual Tests](spring/src/manualTest/manualTest.md) | End-to-end manual test setup and execution |
+| [Kubernetes](cdk/app/lib/constructs/platform/eks/eks.md) | EKS getting started, kubectl setup, manifest deployment, architecture comparison |
+| [Manifests & Kubectl](cdk/app/lib/constructs/platform/eks/manifest/readme.md) | K8s manifest templates, and cluster access via kubectl |
+| [Identity Management](cdk/app/idp/idp.md)  | Cognito identity provider setup, client scopes, credential retrieval scripts |
+| [CI/CD](cdk/app/ci/ci.md) | CI/CD pipeline stages, runner infrastructure, secrets, GitLab vs GitHub differences |
+| [Issues](issues.md) | Known issues and workarounds |
+
 
 ---
 
@@ -36,27 +58,6 @@ The documentation below covers a lot of infrastructure - CDK stacks, runner boot
 The CI pipeline handles everything from there: build, image push, deploy to dev, run integration tests, and (with manual approval) promote to release. Once the infrastructure is bootstrapped, you rarely need to touch it again.
 
 The rest of this document covers the one-time setup that makes that workflow possible, and the architecture behind it.
-
----
-
-
-## Documentation Layout
-
-
-| Document | Covers |
-|----------|--------|
-| *this file* | Project and documemtation overview, shared config, authentication, deployment architecture|
-| [setup](setup.md) | General setup details and prerequisites |
-| [spring](spring/spring.md) | Spring Boot app setup, profiles, API endpoints, test tiers, Jib image builds |
-| [grafana](cdk/app/lib/constructs/platform/ecs/grafana/grafana.md) | Observability: Grafana Cloud metrics sidecar setup, dashboards, costs |
-| [testing](spring/src/testing.md) | Test architecture design rationale, environment isolation strategy, FakeAws concept |
-| [manualTest](spring/src/manualTest/manualTest.md) | End-to-end manual test setup and execution |
-| [cdk](cdk/cdk.md)  | CDK stacks, config.yaml, AWS infrastructure (VPC, WAF, ECS/EKS, S3, IAM), first-time deploy commands |
-| [eks](cdk/app/lib/constructs/platform/eks/eks.md) | EKS getting started, kubectl setup, manifest deployment, architecture comparison |
-| [manifests & kubectl](cdk/app/lib/constructs/platform/eks/manifest/readme.md) | K8s manifest templates, and cluster access via kubectl |
-| [idp](cdk/app/idp/idp.md)  | Cognito identity provider setup, client scopes, credential retrieval scripts |
-| [ci](cdk/app/ci/ci.md) | CI/CD pipeline stages, runner infrastructure, secrets, GitLab vs GitHub differences |
-| [issues](issues.md) | Known issues and workarounds |
 
 
 ---

@@ -1,10 +1,12 @@
 # .github/workflows/ci-build.yaml
 #
+# Reusable workflow, called by ci.yaml.
+
 # Compile and test -- no AWS credentials needed.
 # Called by ci.yaml
 # Can run on GitHub-hosted or self-hosted runners.
 
-name: Build & Test
+name: Reusable – (Build & Test)
 
 on:
   workflow_call:
